@@ -1,0 +1,585 @@
+{
+  "date": "2026-10-20",
+  "method": "Architecture-focused source inspection of 17 public repositories, selected for direct scrolling relevance, Mac adoption, platform techniques and lineage. Popularity was checked with live GitHub star counts; small emerging projects are included for technical relevance. This is not an exhaustive census or full audit of every file. This architecture-study phase did not build, install or benchmark upstream projects; subsequent engine evaluation is recorded separately.",
+  "target": {
+    "url": "https://chainyourmac.com/",
+    "setup": "https://chainyourmac.com/setup",
+    "basis": "Public product and setup pages; no public ChainYourMac implementation was identified in the repository search."
+  },
+  "recommendation": "For the requested Rust direction, use a Rust background engine with a SwiftUI/AppKit shell. Evaluate Paneru as the closest existing engine candidate and Rift as the second candidate. For a fresh Mac-only build, Swift throughout likely reduces development effort; there is no measured Rust-versus-Swift winner in this study.",
+  "repositories": [
+    {
+      "full_name": "karinushka/paneru",
+      "html_url": "https://github.com/karinushka/paneru",
+      "description": "A sliding, tiling window manager for MacOS.",
+      "language": "Rust",
+      "stargazers_count": 2411,
+      "pushed_at": "2026-10-20T21:29:31Z",
+      "archived": false,
+      "default_branch": "main",
+      "license": "MIT",
+      "commit": "12c58b2225a40e434053ea9343a41e2012466f9a",
+      "commit_date": "2026-10-20T21:49:03+02:00",
+      "local_path": ".research/repos/karinushka__paneru",
+      "group": "Closest match",
+      "source_license": "MIT",
+      "stack": "Rust + Bevy ECS",
+      "finding": "The closest existing Rust foundation: persistent horizontal strips, stacks, tabbed display, raw gestures, inertia, session restore and native Spaces. Layout state and OS frame commits are separate systems; IPC currently uses typed Mach messages.",
+      "caveat": "The current frame commit systems use parallel worker iteration. The architecture document's blanket main-thread AX rule is stale. Parallel writes can still hold a frame schedule open; responsiveness needs measurement before adopting the engine. Edge parking and adjacent displays need physical testing.",
+      "reviewed_files": [
+        {
+          "path": "src/ecs/layout.rs",
+          "url": "https://github.com/karinushka/paneru/blob/12c58b2225a40e434053ea9343a41e2012466f9a/src/ecs/layout.rs"
+        },
+        {
+          "path": "src/ecs/scroll.rs",
+          "url": "https://github.com/karinushka/paneru/blob/12c58b2225a40e434053ea9343a41e2012466f9a/src/ecs/scroll.rs"
+        },
+        {
+          "path": "src/ecs/systems.rs",
+          "url": "https://github.com/karinushka/paneru/blob/12c58b2225a40e434053ea9343a41e2012466f9a/src/ecs/systems.rs"
+        },
+        {
+          "path": "src/manager/windows.rs",
+          "url": "https://github.com/karinushka/paneru/blob/12c58b2225a40e434053ea9343a41e2012466f9a/src/manager/windows.rs"
+        },
+        {
+          "path": "src/reader.rs",
+          "url": "https://github.com/karinushka/paneru/blob/12c58b2225a40e434053ea9343a41e2012466f9a/src/reader.rs"
+        },
+        {
+          "path": "Cargo.toml",
+          "url": "https://github.com/karinushka/paneru/blob/12c58b2225a40e434053ea9343a41e2012466f9a/Cargo.toml"
+        }
+      ]
+    },
+    {
+      "full_name": "OmniNull/OmniWM",
+      "html_url": "https://github.com/OmniNull/OmniWM",
+      "description": "Free, open-source tiling window manager for Apple Silicon Macs, with Niri-style scrolling containers and Hyprland-style Dwindle BSP.",
+      "language": "Swift",
+      "stargazers_count": 3375,
+      "pushed_at": "2026-10-20T16:00:14Z",
+      "archived": false,
+      "default_branch": "main",
+      "license": "GPL-2.0",
+      "commit": "19980a7e21aa9da60b14d48c2eb7a342b7e76026",
+      "commit_date": "2026-10-20T20:00:13+04:00",
+      "local_path": ".research/repos/OmniNull__OmniWM",
+      "group": "Closest match",
+      "source_license": "GPL-2.0-only",
+      "stack": "Swift / AppKit / SwiftUI",
+      "finding": "A substantial native scrolling implementation, also offering a BSP layout. Its per-application AX workers accept batched frame requests; mailboxes replace pending work by window ID and generation checks cancel stale writes. Viewport motion separates gesture, spring and deceleration states.",
+      "caveat": "Its broad feature set adds integration surface. Use as a reference for Mac behavior and asynchronous frame delivery. Evaluate the GPL distribution model before choosing it as the product's code foundation.",
+      "reviewed_files": [
+        {
+          "path": "Sources/OmniWM/Core/Layout/Niri/NiriLayoutEngine.swift",
+          "url": "https://github.com/OmniNull/OmniWM/blob/19980a7e21aa9da60b14d48c2eb7a342b7e76026/Sources/OmniWM/Core/Layout/Niri/NiriLayoutEngine.swift"
+        },
+        {
+          "path": "Sources/OmniWM/Core/Ax/AppAXFrameMailbox.swift",
+          "url": "https://github.com/OmniNull/OmniWM/blob/19980a7e21aa9da60b14d48c2eb7a342b7e76026/Sources/OmniWM/Core/Ax/AppAXFrameMailbox.swift"
+        },
+        {
+          "path": "Sources/OmniWM/Core/Ax/AppAXContext+FrameDispatch.swift",
+          "url": "https://github.com/OmniNull/OmniWM/blob/19980a7e21aa9da60b14d48c2eb7a342b7e76026/Sources/OmniWM/Core/Ax/AppAXContext%2BFrameDispatch.swift"
+        },
+        {
+          "path": "Sources/OmniWM/Core/Animation/AnimationDriver.swift",
+          "url": "https://github.com/OmniNull/OmniWM/blob/19980a7e21aa9da60b14d48c2eb7a342b7e76026/Sources/OmniWM/Core/Animation/AnimationDriver.swift"
+        }
+      ]
+    },
+    {
+      "full_name": "apphane-dev/nehir",
+      "html_url": "https://github.com/apphane-dev/nehir",
+      "description": "Nehir \u2014 a tiling window manager for macOS",
+      "language": "Swift",
+      "stargazers_count": 357,
+      "pushed_at": "2026-08-20T13:28:35Z",
+      "archived": false,
+      "default_branch": "main",
+      "license": "GPL-2.0",
+      "commit": "f097f35a22c463b343c16e29327bd317b7573171",
+      "commit_date": "2026-08-13T16:36:08+03:00",
+      "local_path": ".research/repos/apphane-dev__nehir",
+      "group": "Closest match",
+      "source_license": "GPL-2.0-only",
+      "stack": "Swift / AppKit / SwiftUI",
+      "finding": "A scrolling-focused fork of OmniWM. Reveal policy distinguishes explicit navigation from automatic focus recovery, with columns, viewport state and per-application frame application. Especially useful for studying focus behavior after window closes and stack changes.",
+      "caveat": "Shares a code lineage with OmniWM, so these are not independent implementations. Its README documents parked windows surviving a crash and neighboring-display bleed. Those are product requirements to solve, not language problems.",
+      "reviewed_files": [
+        {
+          "path": "Sources/Nehir/Core/Layout/Niri/NiriLayoutEngine.swift",
+          "url": "https://github.com/apphane-dev/nehir/blob/f097f35a22c463b343c16e29327bd317b7573171/Sources/Nehir/Core/Layout/Niri/NiriLayoutEngine.swift"
+        },
+        {
+          "path": "Sources/Nehir/Core/Ax/AXManager.swift",
+          "url": "https://github.com/apphane-dev/nehir/blob/f097f35a22c463b343c16e29327bd317b7573171/Sources/Nehir/Core/Ax/AXManager.swift"
+        },
+        {
+          "path": "README.md",
+          "url": "https://github.com/apphane-dev/nehir/blob/f097f35a22c463b343c16e29327bd317b7573171/README.md"
+        }
+      ]
+    },
+    {
+      "full_name": "mogenson/PaperWM.spoon",
+      "html_url": "https://github.com/mogenson/PaperWM.spoon",
+      "description": "Tiled scrollable window manager for MacOS",
+      "language": "Lua",
+      "stargazers_count": 1791,
+      "pushed_at": "2026-10-13T20:54:24Z",
+      "archived": false,
+      "default_branch": "main",
+      "license": "MIT",
+      "commit": "2a561eb63df4fd72fc2556e411bd4e1c88f57f48",
+      "commit_date": "2026-10-13T16:54:14-04:00",
+      "local_path": ".research/repos/mogenson__PaperWM.spoon",
+      "group": "Closest match",
+      "source_license": "MIT",
+      "stack": "Lua on Hammerspoon",
+      "finding": "A compact, readable model of Mac scrolling tiling. Arrays of columns, an anchor window and virtual x positions drive layout. The gesture module tracks touch identities and computes movement from normalized touch positions.",
+      "caveat": "A useful fast prototype route for personal use. A standalone consumer app would still need packaging and its own native settings experience. The project explicitly documents off-screen margins and vertically arranged monitors as workarounds.",
+      "reviewed_files": [
+        {
+          "path": "tiling.lua",
+          "url": "https://github.com/mogenson/PaperWM.spoon/blob/2a561eb63df4fd72fc2556e411bd4e1c88f57f48/tiling.lua"
+        },
+        {
+          "path": "swipe.lua",
+          "url": "https://github.com/mogenson/PaperWM.spoon/blob/2a561eb63df4fd72fc2556e411bd4e1c88f57f48/swipe.lua"
+        },
+        {
+          "path": "README.md",
+          "url": "https://github.com/mogenson/PaperWM.spoon/blob/2a561eb63df4fd72fc2556e411bd4e1c88f57f48/README.md"
+        }
+      ]
+    },
+    {
+      "full_name": "qeude/Defi",
+      "html_url": "https://github.com/qeude/Defi",
+      "description": "A fast, native scrollable-tiling window manager for macOS, inspired by Niri.",
+      "language": "Swift",
+      "stargazers_count": 34,
+      "pushed_at": "2026-10-20T08:29:06Z",
+      "archived": false,
+      "default_branch": "main",
+      "license": "MIT",
+      "commit": "e0e68a41a5c3910ec97492713e1d2520e0e67c5f",
+      "commit_date": "2026-10-19T22:55:03+02:00",
+      "local_path": ".research/repos/qeude__Defi",
+      "group": "Closest match",
+      "source_license": "MIT",
+      "stack": "Swift",
+      "finding": "An emerging scrolling manager with a useful separation between pure layout, runtime intent and Mac frame delivery. Its AX coordinator rejects stale generations, rebases animation onto completed positions and keeps display callbacks separate from AX writes.",
+      "caveat": "Small adoption compared with the established projects. Its performance document includes historical measurements and later revalidation that did not establish a general gain. Trackpad navigation is outside its documented V1 scope. Treat its targets as targets, not benchmark guarantees.",
+      "reviewed_files": [
+        {
+          "path": "Sources/DefiCore/Layout.swift",
+          "url": "https://github.com/qeude/Defi/blob/e0e68a41a5c3910ec97492713e1d2520e0e67c5f/Sources/DefiCore/Layout.swift"
+        },
+        {
+          "path": "Sources/DefiMacOS/AXFrameCoordinatorQueue.swift",
+          "url": "https://github.com/qeude/Defi/blob/e0e68a41a5c3910ec97492713e1d2520e0e67c5f/Sources/DefiMacOS/AXFrameCoordinatorQueue.swift"
+        },
+        {
+          "path": "Sources/DefiMacOS/FrameAnimationDriver.swift",
+          "url": "https://github.com/qeude/Defi/blob/e0e68a41a5c3910ec97492713e1d2520e0e67c5f/Sources/DefiMacOS/FrameAnimationDriver.swift"
+        },
+        {
+          "path": "PERFORMANCE.md",
+          "url": "https://github.com/qeude/Defi/blob/e0e68a41a5c3910ec97492713e1d2520e0e67c5f/PERFORMANCE.md"
+        }
+      ]
+    },
+    {
+      "full_name": "acsandmann/rift",
+      "html_url": "https://github.com/acsandmann/rift",
+      "description": "a tiling window manager for macos",
+      "language": "Rust",
+      "stargazers_count": 2622,
+      "pushed_at": "2026-10-20T21:19:27Z",
+      "archived": false,
+      "default_branch": "main",
+      "license": "NOASSERTION",
+      "commit": "f5717097a2172a7243050f0430c9a1db9a4aec23",
+      "commit_date": "2026-10-20T12:35:04-04:00",
+      "local_path": ".research/repos/acsandmann__rift",
+      "group": "Rust architecture",
+      "source_license": "Apache-2.0; Glide-derived portions",
+      "stack": "Rust",
+      "finding": "A Glide-derived manager that now includes scrolling columns as well as other layouts. Its scrolling implementation keeps persistent column IDs and a camera offset. Its display-link bridge publishes one replaceable tick rather than queuing stale display events.",
+      "caveat": "A particularly relevant second Rust candidate, with a broader scope than a strip-only product. It intentionally uses undocumented APIs. GitHub's license classifier returns NOASSERTION; the checked-in LICENSE contains Apache 2.0 and origin attribution.",
+      "reviewed_files": [
+        {
+          "path": "src/layout_engine/systems/scrolling.rs",
+          "url": "https://github.com/acsandmann/rift/blob/f5717097a2172a7243050f0430c9a1db9a4aec23/src/layout_engine/systems/scrolling.rs"
+        },
+        {
+          "path": "src/sys/display_link.rs",
+          "url": "https://github.com/acsandmann/rift/blob/f5717097a2172a7243050f0430c9a1db9a4aec23/src/sys/display_link.rs"
+        },
+        {
+          "path": "README.md",
+          "url": "https://github.com/acsandmann/rift/blob/f5717097a2172a7243050f0430c9a1db9a4aec23/README.md"
+        },
+        {
+          "path": "LICENSE",
+          "url": "https://github.com/acsandmann/rift/blob/f5717097a2172a7243050f0430c9a1db9a4aec23/LICENSE"
+        }
+      ]
+    },
+    {
+      "full_name": "tmandry/glide",
+      "html_url": "https://github.com/tmandry/glide",
+      "description": "A tiling window manager for macOS",
+      "language": "Rust",
+      "stargazers_count": 694,
+      "pushed_at": "2026-10-19T18:41:09Z",
+      "archived": false,
+      "default_branch": "main",
+      "license": "Apache-2.0",
+      "commit": "ef3b30f88445fe4b517eb4c60023011f6d3725dd",
+      "commit_date": "2026-10-12T22:37:46-04:00",
+      "local_path": ".research/repos/tmandry__glide",
+      "group": "Rust architecture",
+      "source_license": "MIT OR Apache-2.0",
+      "stack": "Rust / AppKit",
+      "finding": "Strong separation between system wrappers, pure model and side-effecting actors. Per-application threads handle AX work; transaction IDs keep delayed feedback from undoing newer intent. Animation requests can replace an active animation.",
+      "caveat": "Its main layout model is a tiling tree, so adopting it would require scrolling behavior. Its actor design is more relevant here than copying its complete layout engine. Package metadata explicitly offers a dual license.",
+      "reviewed_files": [
+        {
+          "path": "src/actor/app.rs",
+          "url": "https://github.com/tmandry/glide/blob/ef3b30f88445fe4b517eb4c60023011f6d3725dd/src/actor/app.rs"
+        },
+        {
+          "path": "src/actor/reactor/animation.rs",
+          "url": "https://github.com/tmandry/glide/blob/ef3b30f88445fe4b517eb4c60023011f6d3725dd/src/actor/reactor/animation.rs"
+        },
+        {
+          "path": "ARCHITECTURE.md",
+          "url": "https://github.com/tmandry/glide/blob/ef3b30f88445fe4b517eb4c60023011f6d3725dd/ARCHITECTURE.md"
+        },
+        {
+          "path": "Cargo.toml",
+          "url": "https://github.com/tmandry/glide/blob/ef3b30f88445fe4b517eb4c60023011f6d3725dd/Cargo.toml"
+        }
+      ]
+    },
+    {
+      "full_name": "niri-wm/niri",
+      "html_url": "https://github.com/niri-wm/niri",
+      "description": "A scrollable-tiling Wayland compositor.",
+      "language": "Rust",
+      "stargazers_count": 28557,
+      "pushed_at": "2026-10-20T14:22:42Z",
+      "archived": false,
+      "default_branch": "main",
+      "license": "GPL-3.0",
+      "commit": "aee25c9efcfa85b6029d5d1a2b7aaac7d87ae9d1",
+      "commit_date": "2026-10-20T17:22:33+03:00",
+      "local_path": ".research/repos/niri-wm__niri",
+      "group": "Linux origin",
+      "source_license": "GPL-3.0",
+      "stack": "Rust / Smithay / Wayland",
+      "finding": "The strongest behavioral reference for scrolling columns, viewport fitting, gestures and display reconnect policy. Its ScrollingSpace owns columns separately from view offset; layout tests include generated sequences of operations.",
+      "caveat": "Niri is a compositor that controls rendering. Its Smithay, Wayland and rendering dependencies do not provide a Mac window-control backend. Reimplementing its behavior on macOS is a different task from compiling it for Mac.",
+      "reviewed_files": [
+        {
+          "path": "src/layout/mod.rs",
+          "url": "https://github.com/niri-wm/niri/blob/aee25c9efcfa85b6029d5d1a2b7aaac7d87ae9d1/src/layout/mod.rs"
+        },
+        {
+          "path": "src/layout/scrolling.rs",
+          "url": "https://github.com/niri-wm/niri/blob/aee25c9efcfa85b6029d5d1a2b7aaac7d87ae9d1/src/layout/scrolling.rs"
+        },
+        {
+          "path": "src/layout/tests.rs",
+          "url": "https://github.com/niri-wm/niri/blob/aee25c9efcfa85b6029d5d1a2b7aaac7d87ae9d1/src/layout/tests.rs"
+        }
+      ]
+    },
+    {
+      "full_name": "paperwm/PaperWM",
+      "html_url": "https://github.com/paperwm/PaperWM",
+      "description": "Tiled scrollable window management for GNOME Shell",
+      "language": "JavaScript",
+      "stargazers_count": 4356,
+      "pushed_at": "2026-10-13T05:56:40Z",
+      "archived": false,
+      "default_branch": "release",
+      "license": "GPL-3.0",
+      "commit": "2d460db8365b2dee235dde15103161e67df83247",
+      "commit_date": "2026-10-13T14:56:17+09:00",
+      "local_path": ".research/repos/paperwm__PaperWM",
+      "group": "Linux origin",
+      "source_license": "GPL-3.0",
+      "stack": "JavaScript / GNOME Shell",
+      "finding": "The original workflow reference uses columns of MetaWindows and a clipped container of window clones. Scrolling moves that container; real window positions are committed after animation. Gesture handling integrates with GNOME Shell.",
+      "caveat": "That animation strategy depends on compositor-level GNOME access. The fact that JavaScript drives it is another reason not to infer smoothness from implementation language alone.",
+      "reviewed_files": [
+        {
+          "path": "tiling.js",
+          "url": "https://github.com/paperwm/PaperWM/blob/2d460db8365b2dee235dde15103161e67df83247/tiling.js"
+        },
+        {
+          "path": "gestures.js",
+          "url": "https://github.com/paperwm/PaperWM/blob/2d460db8365b2dee235dde15103161e67df83247/gestures.js"
+        }
+      ]
+    },
+    {
+      "full_name": "nikitabobko/AeroSpace",
+      "html_url": "https://github.com/nikitabobko/AeroSpace",
+      "description": "AeroSpace is an i3-like tiling window manager for macOS",
+      "language": "Swift",
+      "stargazers_count": 23565,
+      "pushed_at": "2026-10-02T11:37:43Z",
+      "archived": false,
+      "default_branch": "main",
+      "license": "MIT",
+      "commit": "74a1bf17e82d70e0a21945ba04bb4f590bf19f83",
+      "commit_date": "2026-10-01T17:30:37+02:00",
+      "local_path": ".research/repos/nikitabobko__AeroSpace",
+      "group": "Established Mac",
+      "source_license": "MIT",
+      "stack": "Swift",
+      "finding": "Recursive tree layouts, configurable rules and emulated workspaces. MacApp creates a dedicated AX thread for each application. MacWindow parks hidden-workspace windows in corners; layout code accounts for monitor-boundary quirks.",
+      "caveat": "A mature source of platform techniques rather than a ready-made scrolling layout. Its own workspace system differs from keeping an independent strip in each native macOS Space.",
+      "reviewed_files": [
+        {
+          "path": "Sources/AppBundle/tree/MacApp.swift",
+          "url": "https://github.com/nikitabobko/AeroSpace/blob/74a1bf17e82d70e0a21945ba04bb4f590bf19f83/Sources/AppBundle/tree/MacApp.swift"
+        },
+        {
+          "path": "Sources/AppBundle/tree/MacWindow.swift",
+          "url": "https://github.com/nikitabobko/AeroSpace/blob/74a1bf17e82d70e0a21945ba04bb4f590bf19f83/Sources/AppBundle/tree/MacWindow.swift"
+        },
+        {
+          "path": "Sources/AppBundle/layout/layoutRecursive.swift",
+          "url": "https://github.com/nikitabobko/AeroSpace/blob/74a1bf17e82d70e0a21945ba04bb4f590bf19f83/Sources/AppBundle/layout/layoutRecursive.swift"
+        }
+      ]
+    },
+    {
+      "full_name": "asmvik/yabai",
+      "html_url": "https://github.com/asmvik/yabai",
+      "description": "A tiling window manager for macOS based on binary space partitioning",
+      "language": "C",
+      "stargazers_count": 29746,
+      "pushed_at": "2026-06-14T12:40:07Z",
+      "archived": false,
+      "default_branch": "master",
+      "license": "MIT",
+      "commit": "dd845723416f5fe92af49fad5ebab00369e07edd",
+      "commit_date": "2026-06-14T14:40:04+02:00",
+      "local_path": ".research/repos/asmvik__yabai",
+      "group": "Established Mac",
+      "source_license": "MIT",
+      "stack": "C / Objective-C interfaces",
+      "finding": "A valuable platform reference. Frame application uses size, position, then size again to work around macOS constraints. The animation path uses window proxies, SkyLight transactions and a display link. Source comments explicitly discuss delayed AX events and stale caches.",
+      "caveat": "Its BSP model differs from scrolling. Basic operation and its optional scripting addition have different requirements: the README marks partial SIP disabling as optional for elevated features. Do not generalize that all yabai use requires disabling SIP.",
+      "reviewed_files": [
+        {
+          "path": "src/window_manager.c",
+          "url": "https://github.com/asmvik/yabai/blob/dd845723416f5fe92af49fad5ebab00369e07edd/src/window_manager.c"
+        },
+        {
+          "path": "README.md",
+          "url": "https://github.com/asmvik/yabai/blob/dd845723416f5fe92af49fad5ebab00369e07edd/README.md"
+        }
+      ]
+    },
+    {
+      "full_name": "ianyh/Amethyst",
+      "html_url": "https://github.com/ianyh/Amethyst",
+      "description": "Automatic tiling window manager for macOS \u00e0 la xmonad.",
+      "language": "Swift",
+      "stargazers_count": 16296,
+      "pushed_at": "2026-10-20T00:02:24Z",
+      "archived": false,
+      "default_branch": "development",
+      "license": "MIT",
+      "commit": "641dea7fe1571ca006f436e36e617775fe8dd93d",
+      "commit_date": "2026-10-19T20:02:24-04:00",
+      "local_path": ".research/repos/ianyh__Amethyst",
+      "group": "Established Mac",
+      "source_license": "MIT",
+      "stack": "Swift",
+      "finding": "An example of layout calculation returning frame assignments that execute through cancellable operations. ScreenManager tracks per-Space layouts and cancels outdated reflow operations. Useful for native Space lifecycle and app exceptions.",
+      "caveat": "Its layouts are screen reflows rather than a persistent scrolling camera. Much of the application-level machinery would be unnecessary in a narrowly scoped strip implementation.",
+      "reviewed_files": [
+        {
+          "path": "Amethyst/Layout/ReflowOperation.swift",
+          "url": "https://github.com/ianyh/Amethyst/blob/641dea7fe1571ca006f436e36e617775fe8dd93d/Amethyst/Layout/ReflowOperation.swift"
+        },
+        {
+          "path": "Amethyst/Managers/ScreenManager.swift",
+          "url": "https://github.com/ianyh/Amethyst/blob/641dea7fe1571ca006f436e36e617775fe8dd93d/Amethyst/Managers/ScreenManager.swift"
+        }
+      ]
+    },
+    {
+      "full_name": "rxhanson/Rectangle",
+      "html_url": "https://github.com/rxhanson/Rectangle",
+      "description": "Move and resize windows on macOS with keyboard shortcuts and snap areas",
+      "language": "Swift",
+      "stargazers_count": 30114,
+      "pushed_at": "2026-10-20T18:10:58Z",
+      "archived": false,
+      "default_branch": "main",
+      "license": "NOASSERTION",
+      "commit": "e9bb8521e51727de21c31c3a96747909d42c098f",
+      "commit_date": "2026-10-20T11:33:06-04:00",
+      "local_path": ".research/repos/rxhanson__Rectangle",
+      "group": "Snapping and UX",
+      "source_license": "MIT",
+      "stack": "Swift",
+      "finding": "A strong reference for reliable frame placement and stubborn windows. StandardWindowMover chooses whether to resize or move first based on screen geometry; BestEffortWindowMover corrects the accepted frame when the requested size cannot be achieved.",
+      "caveat": "A snapping utility, not an automatic scrolling layout engine. Its platform edge cases and settings experience are more transferable than its action model. The checked-in license is MIT despite GitHub's classifier returning NOASSERTION.",
+      "reviewed_files": [
+        {
+          "path": "Rectangle/WindowMover/StandardWindowMover.swift",
+          "url": "https://github.com/rxhanson/Rectangle/blob/e9bb8521e51727de21c31c3a96747909d42c098f/Rectangle/WindowMover/StandardWindowMover.swift"
+        },
+        {
+          "path": "Rectangle/WindowMover/BestEffortWindowMover.swift",
+          "url": "https://github.com/rxhanson/Rectangle/blob/e9bb8521e51727de21c31c3a96747909d42c098f/Rectangle/WindowMover/BestEffortWindowMover.swift"
+        },
+        {
+          "path": "LICENSE",
+          "url": "https://github.com/rxhanson/Rectangle/blob/e9bb8521e51727de21c31c3a96747909d42c098f/LICENSE"
+        }
+      ]
+    },
+    {
+      "full_name": "mrkai77/Loop",
+      "html_url": "https://github.com/mrkai77/Loop",
+      "description": "Window management made elegant.",
+      "language": "Swift",
+      "stargazers_count": 11815,
+      "pushed_at": "2026-10-18T09:16:25Z",
+      "archived": false,
+      "default_branch": "develop",
+      "license": "GPL-3.0",
+      "commit": "573ace3071641bbe002527ccfc0811842300ccba",
+      "commit_date": "2026-10-13T01:44:04-06:00",
+      "local_path": ".research/repos/mrkai77__Loop",
+      "group": "Snapping and UX",
+      "source_license": "GPL-3.0",
+      "stack": "Swift / SwiftUI",
+      "finding": "A useful native interaction reference. WindowEngine resolves window state, handles fullscreen and may invoke supported system window actions. Its resize animation caches the last frame and cancels a previous animation for the same window.",
+      "caveat": "A snapping-oriented interaction model. Its per-window resize animation does not by itself solve synchronized movement across a strip of different applications.",
+      "reviewed_files": [
+        {
+          "path": "Loop/Window Management/Window Manipulation/WindowEngine.swift",
+          "url": "https://github.com/mrkai77/Loop/blob/573ace3071641bbe002527ccfc0811842300ccba/Loop/Window%20Management/Window%20Manipulation/WindowEngine.swift"
+        },
+        {
+          "path": "Loop/Window Management/Window Manipulation/WindowTransformAnimation.swift",
+          "url": "https://github.com/mrkai77/Loop/blob/573ace3071641bbe002527ccfc0811842300ccba/Loop/Window%20Management/Window%20Manipulation/WindowTransformAnimation.swift"
+        },
+        {
+          "path": "Loop/Window Management/Window/Window.swift",
+          "url": "https://github.com/mrkai77/Loop/blob/573ace3071641bbe002527ccfc0811842300ccba/Loop/Window%20Management/Window/Window.swift"
+        }
+      ]
+    },
+    {
+      "full_name": "Hammerspoon/hammerspoon",
+      "html_url": "https://github.com/Hammerspoon/hammerspoon",
+      "description": "Staggeringly powerful macOS desktop automation with Lua",
+      "language": "Objective-C",
+      "stargazers_count": 16305,
+      "pushed_at": "2026-07-08T21:13:24Z",
+      "archived": false,
+      "default_branch": "master",
+      "license": "MIT",
+      "commit": "23e387e2805a9890066366e0ac96c71b27f0cfd5",
+      "commit_date": "2026-07-08T22:13:24+01:00",
+      "local_path": ".research/repos/Hammerspoon__hammerspoon",
+      "group": "Automation foundation",
+      "source_license": "MIT",
+      "stack": "Objective-C / Lua",
+      "finding": "The native foundation under PaperWM.spoon. Its window extension bridges Lua to native window objects; its instant frame setter documents the size-position-size sequence and Enhanced UI handling. UI-element watchers expose native notifications.",
+      "caveat": "Excellent for experimentation and investigating platform behavior. Shipping a focused app on it means inheriting an entire automation host and its lifecycle.",
+      "reviewed_files": [
+        {
+          "path": "extensions/window/libwindow.m",
+          "url": "https://github.com/Hammerspoon/hammerspoon/blob/23e387e2805a9890066366e0ac96c71b27f0cfd5/extensions/window/libwindow.m"
+        },
+        {
+          "path": "extensions/uielement/libuielement_watcher.m",
+          "url": "https://github.com/Hammerspoon/hammerspoon/blob/23e387e2805a9890066366e0ac96c71b27f0cfd5/extensions/uielement/libuielement_watcher.m"
+        }
+      ]
+    },
+    {
+      "full_name": "kasper/phoenix",
+      "html_url": "https://github.com/kasper/phoenix",
+      "description": "A lightweight macOS window and app manager scriptable with JavaScript",
+      "language": "Objective-C",
+      "stargazers_count": 4545,
+      "pushed_at": "2025-08-31T15:27:29Z",
+      "archived": false,
+      "default_branch": "master",
+      "license": "NOASSERTION",
+      "commit": "916f8f19740530cd7cd63448ec0b6fa62925cebf",
+      "commit_date": "2025-08-31T18:27:25+03:00",
+      "local_path": ".research/repos/kasper__phoenix",
+      "group": "Automation foundation",
+      "source_license": "MIT; icon assets excluded",
+      "stack": "Objective-C / JavaScriptCore",
+      "finding": "A small scriptable Mac window-management foundation. AXObserver bridges app notifications; PHWindow sets a frame with the same size-position-size sequence and verifies the result. Useful for a minimal native API surface.",
+      "caveat": "Scripting primitives rather than a complete scrolling product. The license explicitly excludes the app icon assets from MIT coverage.",
+      "reviewed_files": [
+        {
+          "path": "Phoenix/PHAXObserver.m",
+          "url": "https://github.com/kasper/phoenix/blob/916f8f19740530cd7cd63448ec0b6fa62925cebf/Phoenix/PHAXObserver.m"
+        },
+        {
+          "path": "Phoenix/PHWindow.m",
+          "url": "https://github.com/kasper/phoenix/blob/916f8f19740530cd7cd63448ec0b6fa62925cebf/Phoenix/PHWindow.m"
+        },
+        {
+          "path": "LICENSE.md",
+          "url": "https://github.com/kasper/phoenix/blob/916f8f19740530cd7cd63448ec0b6fa62925cebf/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "full_name": "eczarny/spectacle",
+      "html_url": "https://github.com/eczarny/spectacle",
+      "description": "Spectacle allows you to organize your windows without using a mouse.",
+      "language": "Objective-C",
+      "stargazers_count": 13620,
+      "pushed_at": "2022-01-15T17:32:42Z",
+      "archived": true,
+      "default_branch": "master",
+      "license": "NOASSERTION",
+      "commit": "e75c341ec2cba179c1bb8aa726a870c4132207df",
+      "commit_date": "2019-11-09T12:53:56-05:00",
+      "local_path": ".research/repos/eczarny__spectacle",
+      "group": "Legacy reference",
+      "source_license": "MIT",
+      "stack": "Objective-C",
+      "finding": "A historical snapping reference and predecessor acknowledged by Rectangle. StandardWindowMover reads the current rectangle and composes frame-setting with another mover, illustrating a small platform abstraction.",
+      "caveat": "Archived and explicitly unmaintained. Useful for lineage, not a sensible new product foundation.",
+      "reviewed_files": [
+        {
+          "path": "Spectacle/Sources/SpectacleStandardWindowMover.m",
+          "url": "https://github.com/eczarny/spectacle/blob/e75c341ec2cba179c1bb8aa726a870c4132207df/Spectacle/Sources/SpectacleStandardWindowMover.m"
+        },
+        {
+          "path": "README.md",
+          "url": "https://github.com/eczarny/spectacle/blob/e75c341ec2cba179c1bb8aa726a870c4132207df/README.md"
+        },
+        {
+          "path": "LICENSE.md",
+          "url": "https://github.com/eczarny/spectacle/blob/e75c341ec2cba179c1bb8aa726a870c4132207df/LICENSE.md"
+        }
+      ]
+    }
+  ]
+}
