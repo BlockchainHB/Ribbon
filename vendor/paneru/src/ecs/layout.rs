@@ -25,6 +25,9 @@ use crate::manager::{Display, Origin, Size, Window};
 use crate::platform::WorkspaceId;
 use crate::util::round_px;
 
+mod parking;
+use parking::{AdjacentDisplayParked, anchored_parking, horizontal_parking};
+
 /// The floor every window in a column is packed against. Heights that would
 /// starve a sibling below it make [`binpack_heights`] fall back to averaging.
 pub(crate) const MIN_WINDOW_HEIGHT: i32 = 200;
@@ -107,6 +110,7 @@ type RepositionedWindows<'w, 's> = Populated<
         &'static mut Position,
         &'static mut Bounds,
         Option<&'static ResizeMarker>,
+        Has<AdjacentDisplayParked>,
     ),
     (Changed<LayoutPosition>, With<Window>, Without<LayoutStrip>),
 >;
@@ -1668,7 +1672,10 @@ fn position_layout_windows(
     mut commands: Commands,
 ) {
     let offscreen_sliver_width = config.sliver_width();
-    let (_, pad_right, _, pad_left) = config.edge_padding();
+    let connected_bounds = displays
+        .iter()
+        .map(|(display, _)| display.bounds())
+        .collect::<Vec<_>>();
     let mut strip_contexts = EntityHashMap::default();
     for (strip_entity, layout_strip, Position(strip_position), reposition, swiping, child_of) in
         &workspaces
@@ -1685,7 +1692,9 @@ fn position_layout_windows(
         );
     }
 
-    for (entity, window, layout_position, mut position, mut bounds, resize) in positioned_windows {
+    for (entity, window, layout_position, mut position, mut bounds, resize, was_parked) in
+        positioned_windows
+    {
         let Some(context) = strip_contexts.get(&entity) else {
             continue;
         };
@@ -1704,26 +1713,30 @@ fn position_layout_windows(
         let h_pad = window.horizontal_padding();
         let target_size = resize.map_or(bounds.0, |resize| resize.0);
         let mut frame = IRect::from_corners(layout_position.0, layout_position.0 + target_size);
-        let width = frame.width();
         frame.min += context.strip_position;
         frame.max += context.strip_position;
 
-        let mut offscreen = false;
-        if frame.max.x <= viewport.min.x + h_pad {
-            // Window hidden to the left — position so exactly
-            // sliver_width CG pixels are visible from the real
-            // display edge.  The +h_pad accounts for the gap that
-            // reposition() adds, which can leave a window just
-            // inside the viewport edge while its CG frame is fully
-            // past it.
-            frame.min.x = viewport.min.x - width + offscreen_sliver_width - pad_left + h_pad;
-            offscreen = true;
-        } else if frame.min.x >= viewport.max.x - h_pad {
-            // Window hidden to the right — mirror of above.
-            frame.min.x = viewport.max.x - offscreen_sliver_width + pad_right - h_pad;
-            offscreen = true;
+        let (mut frame, mut offscreen) = horizontal_parking(frame, viewport, h_pad, &config);
+
+        let anchored = anchored_parking(
+            frame,
+            display.bounds(),
+            &connected_bounds,
+            offscreen,
+            offscreen_sliver_width,
+        );
+        let rerouted = anchored != frame;
+        frame = anchored;
+        offscreen |= rerouted;
+        if rerouted != was_parked
+            && let Ok(mut entity_commands) = commands.get_entity(entity)
+        {
+            if rerouted {
+                entity_commands.insert(AdjacentDisplayParked);
+            } else {
+                entity_commands.try_remove::<AdjacentDisplayParked>();
+            }
         }
-        frame.max.x = frame.min.x + width;
 
         // During swipe, keep full height. The vertical sliver inset only
         // applies to horizontally off-screen windows, so they expose just
@@ -1784,7 +1797,9 @@ fn position_layout_windows(
             // `parking` nor the distance threshold recognizes as
             // restore-driven, since its last position can land close enough
             // to its target. See `SnapStripMarker`.
-            if context.swiping
+            if rerouted
+                || was_parked
+                || context.swiping
                 || context.snap_settling
                 || offscreen_move && !config.virtual_workspace_animations()
             {

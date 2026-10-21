@@ -287,6 +287,9 @@ pub enum WindowPadding {
 pub trait WindowApi: Send + Sync {
     fn id(&self) -> WinID;
     fn frame(&self) -> IRect;
+    fn original_frame(&self) -> Option<IRect> {
+        None
+    }
     fn element(&self) -> Option<CFRetained<AXUIWrapper>>;
     fn title(&self) -> Result<String>;
     /// Drops the cached title so the next [`Self::title`] reads it afresh.
@@ -374,6 +377,7 @@ pub struct WindowOS {
     id: WinID,
     ax_element: CFRetained<AXUIWrapper>,
     frame: IRect,
+    original_frame: Option<IRect>,
     vertical_padding: i32,
     horizontal_padding: i32,
     border_radius: OnceLock<Option<f64>>,
@@ -440,10 +444,11 @@ impl WindowOS {
         bundle_id: Option<&str>,
     ) -> Result<Self> {
         let id = ax_window_id(element.as_ptr())?;
-        let window = Self {
+        let mut window = Self {
             id,
             ax_element: element.clone(),
             frame: IRect::default(),
+            original_frame: None,
             vertical_padding: 0,
             horizontal_padding: 0,
             border_radius: OnceLock::new(),
@@ -455,6 +460,20 @@ impl WindowOS {
             role: OnceLock::new(),
             subrole: OnceLock::new(),
         };
+
+        // Some creation events lack an owning bundle; resolve it before tracking.
+        let owner = bundle_id.map(str::to_string).or_else(|| {
+            objc2_app_kit::NSRunningApplication::runningApplicationWithProcessIdentifier(
+                window.pid().ok()?,
+            )
+            .and_then(|app| app.bundleIdentifier())
+            .map(|id| id.to_string())
+        });
+        if !owner.as_deref().is_some_and(crate::ribbon::allows_bundle) {
+            return Err(Error::invalid_window(
+                "Application is outside Ribbon's managed scope",
+            ));
+        }
 
         let forced = window.is_forced_manage(config, bundle_id);
 
@@ -483,6 +502,7 @@ impl WindowOS {
             window.role().unwrap_or_default(),
             window.subrole().unwrap_or_default(),
         );
+        window.original_frame = window.update_frame().ok();
         Ok(window)
     }
 
@@ -672,6 +692,10 @@ impl WindowOS {
 }
 
 impl WindowApi for WindowOS {
+    fn original_frame(&self) -> Option<IRect> {
+        self.original_frame
+    }
+
     /// Returns the ID of the window.
     ///
     /// # Returns

@@ -805,7 +805,11 @@ pub fn periodic_state_save(
     displays: Query<(&Display, Entity, Has<ActiveDisplayMarker>)>,
     windows: Windows,
     apps: Query<&Application>,
+    config: Res<Config>,
 ) {
+    if !config.restore_enabled() {
+        return;
+    }
     let state = PaneruState::extract(&workspaces, &displays, &windows, &apps);
     let path = PaneruState::default_state_file_path();
     if let Err(e) = state.save_to_file(&path) {
@@ -821,7 +825,11 @@ pub fn cleanup_on_exit(
     displays: Query<(&Display, Entity, Has<ActiveDisplayMarker>)>,
     windows: Windows,
     apps: Query<&Application>,
+    config: Res<Config>,
 ) {
+    if !config.restore_enabled() {
+        return;
+    }
     if exit_events.read().next().is_some() {
         info!("Exiting, saving state...");
         let state = PaneruState::extract(&workspaces, &displays, &windows, &apps);

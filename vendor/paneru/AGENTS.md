@@ -106,4 +106,3 @@ Before concluding a task, creating a commit, or presenting work as complete, age
 *   **Research:** Before implementing, check `src/ecs/...` to see if a similar system already exists.
 *   **Implementation:** Follow the **Plan -> Act -> Validate** cycle.
 *   **Verification:** Execute the cleanup and verification steps in Section 6. If changes affect window tiling or animation, verify that existing layout interactions continue to work as expected.
-

@@ -24,6 +24,7 @@ mod overlay;
 mod pasteboard;
 mod platform;
 mod reader;
+mod ribbon;
 mod util;
 
 pub use paneru::types;
@@ -82,6 +83,10 @@ pub struct Paneru {
 /// a running daemon.
 #[derive(Clone, Debug, Default, Subcommand)]
 pub enum SubCmd {
+    /// Reports Accessibility trust without prompting or starting window management.
+    CheckPermission,
+    /// Validates a generated TOML file without starting window management.
+    CheckConfig { path: std::path::PathBuf },
     /// Launches the `paneru` daemon directly in the console (default behavior).
     #[default]
     Launch,
@@ -209,8 +214,14 @@ fn main() -> Result<()> {
     maybe_warn_deprecated_options_for_service(&subcmd);
 
     match subcmd {
+        SubCmd::CheckPermission => println!("{}", check_ax_privilege()),
+        SubCmd::CheckConfig { path } => {
+            config::Config::load(Some(&path))?;
+            println!("valid");
+        }
         SubCmd::Launch => {
             let (sender, receiver) = EventSender::new();
+            ribbon::watch_parent(sender.clone());
             let sender_c = sender.clone();
             // bevy's `TerminalCtrlCHandlerPlugin` was not fast enough. maybe because of its use of `Relaxed` atomic variable?
             ctrlc::set_handler(move || {

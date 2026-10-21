@@ -5,7 +5,7 @@ use bevy::time::TimeUpdateStrategy;
 
 use crate::commands::{Command, Direction, MouseMove, MoveFocus, Operation};
 use crate::config::{Config, MainOptions};
-use crate::ecs::layout::{LayoutStrip, PARKED_STRIP_SLIVER};
+use crate::ecs::layout::LayoutStrip;
 use crate::ecs::{DockPosition, Timeout};
 use crate::events::Event;
 use crate::manager::{Display, Origin, Size, Window};
@@ -244,6 +244,39 @@ fn test_next_display_inserts_into_target_strip() {
             assert_not_on_workspace!(world, 0, TEST_WORKSPACE_ID);
         })
         .run(commands);
+}
+
+#[test]
+fn new_window_uses_its_physical_display_instead_of_the_active_display() {
+    TestHarness::new()
+        .with_windows(1)
+        .with_display(
+            EXT_DISPLAY_ID,
+            IRect::new(
+                TEST_DISPLAY_WIDTH,
+                0,
+                TEST_DISPLAY_WIDTH + EXT_DISPLAY_WIDTH,
+                EXT_DISPLAY_HEIGHT,
+            ),
+            vec![EXT_WORKSPACE_ID],
+        )
+        .on_iteration(0, |world, state| {
+            let frame = IRect::new(TEST_DISPLAY_WIDTH + 80, 100, TEST_DISPLAY_WIDTH + 480, 500);
+            let window = state.spawn_window(TEST_PROCESS_ID, EXT_WORKSPACE_ID, 100, frame);
+            world.trigger(crate::ecs::SpawnWindowTrigger(vec![window]));
+        })
+        .on_iteration(1, |world, _| {
+            assert_on_workspace!(world, 100, EXT_WORKSPACE_ID);
+            assert_not_on_workspace!(world, 100, TEST_WORKSPACE_ID);
+            assert_on_workspace!(world, 0, TEST_WORKSPACE_ID);
+            assert_window_size!(
+                world,
+                0,
+                TEST_WINDOW_WIDTH,
+                TEST_DISPLAY_HEIGHT - TEST_MENUBAR_HEIGHT
+            );
+        })
+        .run(vec![Event::MenuOpened { window_id: 0 }]);
 }
 
 #[test]
@@ -800,8 +833,8 @@ fn test_hidden_stack_stays_off_the_display_below() {
 
     harness
         .on_iteration(4, |world, _state| {
-            // Hidden, but still parked on their own display: every window keeps
-            // its origin above the top edge of the display below.
+            // Hidden, with a sliver on their own display and no frame occupying
+            // the neighbor. The free outer edge can be above or beside it.
             let mut query = world.query::<&crate::manager::Window>();
             for window in query.iter(world) {
                 let frame = window.frame();
@@ -811,10 +844,18 @@ fn test_hidden_stack_stays_off_the_display_below() {
                     window.id(),
                     frame
                 );
-                assert_eq!(
-                    frame.min.y,
-                    TEST_DISPLAY_HEIGHT - PARKED_STRIP_SLIVER,
-                    "window {} should park on the corner sliver",
+                assert!(
+                    frame.max.y > TEST_MENUBAR_HEIGHT
+                        && frame.min.x < TEST_DISPLAY_WIDTH
+                        && frame.max.x > 0,
+                    "window {} must retain an owning-display sliver",
+                    window.id()
+                );
+                assert!(
+                    frame.max.y <= TEST_DISPLAY_HEIGHT
+                        || frame.min.x >= EXT_DISPLAY_WIDTH
+                        || frame.max.x <= 0,
+                    "window {} must not park inside the display below",
                     window.id()
                 );
             }

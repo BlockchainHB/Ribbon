@@ -492,12 +492,12 @@ create placeholder displays or off-screen state for disconnected monitors.
 ## 7. Experimental Features
 
 > [!WARNING]
-> These features rely on undocumented macOS window-server APIs and have known issues. For example, overlay windows (like YouTube Picture-in-Picture) may be partially shaded, and layer ordering can behave unexpectedly. Both features are **disabled by default**. 
+> These features rely on undocumented macOS window-server APIs and have known issues. For example, overlay windows (like YouTube Picture-in-Picture) may be partially shaded, and layer ordering can behave unexpectedly. Both features are **disabled by default**.
 >
 > Disabling **System Integrity Protection (SIP)** is **not required**, but without it Paneru has limited control over window layering, which is the root cause of most visual edge-cases. Enable these only if you are comfortable with occasional glitches.
 
 ### Inactive Window Overlay Dimming
-Another dimming option that draws a translucent overlay on every inactive window to visually emphasize the focused one. 
+Another dimming option that draws a translucent overlay on every inactive window to visually emphasize the focused one.
 
 **Activation:** This mode is enabled by setting **both** `opacity` and `color` under `[decorations.inactive.dim]`. In this mode, `opacity` ranges from `0.0` to `1.0`.
 

@@ -26,8 +26,8 @@ use crate::ecs::state::PaneruState;
 use crate::ecs::workspace::RestoreFocusMarker;
 use crate::ecs::{
     ActiveWorkspaceMarker, Bounds, DockPosition, Initializing, LayoutPosition, Position,
-    ResizeMarker, RestoreWindowState, Scrolling, SendMessageTrigger, SpawnCommandsExt,
-    VerifyWindowPosition, WidthRatio, WindowProperties,
+    ResizeMarker, RestoreWindowState, Scrolling, SelectedVirtualMarker, SendMessageTrigger,
+    SpawnCommandsExt, VerifyWindowPosition, WidthRatio, WindowProperties,
 };
 use crate::events::{DestroySource, Event};
 use crate::manager::{
@@ -1223,10 +1223,23 @@ pub(super) fn apply_window_defaults(
     }
 }
 
+type WindowInsertionStrips<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static mut LayoutStrip,
+        Has<ActiveWorkspaceMarker>,
+        Has<SelectedVirtualMarker>,
+        Option<&'static ChildOf>,
+    ),
+>;
+
 #[instrument(level = Level::DEBUG, skip_all)]
+#[allow(clippy::too_many_arguments)]
 pub(super) fn apply_window_positions(
     added: Populated<Entity, Added<Window>>,
-    mut workspaces: Query<(&mut LayoutStrip, Has<ActiveWorkspaceMarker>)>,
+    mut workspaces: WindowInsertionStrips,
+    displays: Query<(Entity, &Display)>,
     apps: Query<&Application>,
     initializing: Option<Res<Initializing>>,
     restore: Option<Res<crate::ecs::restore::SessionRestore>>,
@@ -1234,7 +1247,7 @@ pub(super) fn apply_window_positions(
     mut ctx: WindowCtx,
 ) {
     for entity in added {
-        if workspaces.iter().any(|(strip, _)| strip.tabbed(entity)) {
+        if workspaces.iter().any(|(strip, ..)| strip.tabbed(entity)) {
             debug!("Ignoring tabbed {entity} attributes.");
             continue;
         }
@@ -1265,7 +1278,7 @@ pub(super) fn apply_window_positions(
         if properties.floating() {
             if let Some(mut strip) = workspaces
                 .iter_mut()
-                .find_map(|(strip, _)| strip.contains(entity).then_some(strip))
+                .find_map(|(strip, ..)| strip.contains(entity).then_some(strip))
             {
                 strip.remove(entity);
             }
@@ -1279,12 +1292,25 @@ pub(super) fn apply_window_positions(
         // During startup, the window is already inserted into some strip by finish_setup.
         let allready_inserted = workspaces
             .iter_mut()
-            .find_map(|(strip, _)| strip.contains(entity).then_some(strip));
+            .find_map(|(strip, ..)| strip.contains(entity).then_some(strip));
+        let owner = displays.iter().find_map(|(display_entity, display)| {
+            display
+                .bounds()
+                .contains(window.frame().center())
+                .then_some(display_entity)
+        });
         if initializing.is_none()
             && allready_inserted.is_none()
-            && let Some(mut strip) = workspaces
-                .iter_mut()
-                .find_map(|(strip, active)| active.then_some(strip))
+            && let Some(mut strip) =
+                workspaces
+                    .iter_mut()
+                    .find_map(|(strip, active, selected, child)| {
+                        let on_owner = selected
+                            && owner.is_some_and(|owner| {
+                                child.is_some_and(|child| child.parent() == owner)
+                            });
+                        (on_owner || owner.is_none() && active).then_some(strip)
+                    })
         {
             // Attempt inserting the window at a pre-defined position.
             let insert_at = properties.insertion().map_or_else(

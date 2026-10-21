@@ -1,0 +1,278 @@
+import AppKit
+import ApplicationServices
+import CryptoKit
+import RibbonCore
+
+struct FixtureFrame: Codable {
+  let id: UInt32
+  let x: Double, y: Double, width: Double, height: Double
+  let focused: Bool
+  let screenID: UInt32
+  func matches(_ other: Self) -> Bool {
+    abs(x - other.x) < 4 && abs(y - other.y) < 4 && abs(width - other.width) < 4
+      && abs(height - other.height) < 4
+  }
+}
+
+@MainActor
+enum DesktopVerification {
+  private static var started = false
+  struct Check: Encodable {
+    let name: String
+    let passed: Bool
+  }
+  struct Report: Encodable {
+    var status = "running"
+    var system = ProcessInfo.processInfo.operatingSystemVersionString
+    var checks: [Check] = []
+    var commandToObservedFocusMS: [Double] = []
+    var frames: [String: [FixtureFrame]] = [:]
+    var detail: String?
+    var engineSHA256: String?
+    var displays: [DisplaySnapshot] = []
+  }
+  struct DisplaySnapshot: Encodable {
+    let name: String
+    let id: UInt32
+    let x: Double, y: Double, width: Double, height: Double, scale: Double
+    init(_ screen: NSScreen) {
+      name = screen.localizedName
+      id =
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?
+        .uint32Value ?? 0
+      x = screen.frame.minX
+      y = (NSScreen.screens.first?.frame.maxY ?? 0) - screen.frame.maxY
+      width = screen.frame.width
+      height = screen.frame.height
+      scale = screen.backingScaleFactor
+    }
+  }
+
+  static func run(_ controller: SessionController) async {
+    guard !started, let index = CommandLine.arguments.firstIndex(of: "--qa-output"),
+      CommandLine.arguments.indices.contains(index + 1)
+    else { return }
+    started = true
+    let output = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+    let fixture = output.deletingLastPathComponent().appendingPathComponent("fixture-frames.json")
+    let sentinel = output.deletingLastPathComponent().appendingPathComponent("sentinel-frames.json")
+    var report = Report()
+    report.displays = NSScreen.screens.map(DisplaySnapshot.init)
+    var owned: [NSRunningApplication] = []
+    do {
+      try FileManager.default.createDirectory(
+        at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
+      report.engineSHA256 = SHA256.hash(data: try Data(contentsOf: controller.engineURL)).map {
+        String(format: "%02x", $0)
+      }.joined()
+      await controller.refreshPermission()
+      guard controller.permissionGranted, AXIsProcessTrusted() else {
+        report.status = "blocked"
+        report.detail =
+          "Accessibility access is required for the signed local Ribbon app. No window manager was started."
+        try write(report, to: output)
+        return
+      }
+      for app in NSWorkspace.shared.runningApplications
+      where [RibbonSettings.fixtureBundleID, "dev.ribbon.sentinel"].contains(
+        app.bundleIdentifier ?? "")
+      {
+        throw VerificationError.failed(
+          "An existing demo test app is open. Close it before this isolated test run.")
+      }
+      let dualDisplays = CommandLine.arguments.contains("--qa-dual")
+      if dualDisplays && NSScreen.screens.count != 2 {
+        throw VerificationError.failed("Dual-display QA requires exactly two connected displays")
+      }
+      let expectedWindows = dualDisplays ? 8 : 4
+      controller.settings = RibbonSettings()
+      try await controller.openDemo(report: fixture, dualDisplays: dualDisplays)
+      owned += NSRunningApplication.runningApplications(
+        withBundleIdentifier: RibbonSettings.fixtureBundleID)
+      let config = NSWorkspace.OpenConfiguration()
+      config.arguments = ["--report", sentinel.path]
+      let sentinelApp = try await NSWorkspace.shared.openApplication(
+        at: Bundle.main.resourceURL!.appendingPathComponent("Ribbon Sentinel.app"),
+        configuration: config)
+      owned.append(sentinelApp)
+      try await eventually("Fixture windows opened") {
+        try frames(fixture).count == expectedWindows && frames(sentinel).count == 1
+      }
+      let original = try await settledFrames(fixture)
+      let excluded = try await settledFrames(sentinel)
+      report.frames["original"] = original
+      report.frames["excluded"] = excluded
+      await controller.start()
+      try require(controller.phase == .running, "Engine became ready")
+      try await eventually("Only fixture windows are managed") {
+        let state = try JSONDecoder().decode(EngineState.self, from: await controller.query())
+        return state.version == 1 && state.windows.count == expectedWindows
+          && state.windows.allSatisfy { $0.bundleID == RibbonSettings.fixtureBundleID }
+      }
+      report.checks.append(Check(name: "start and exact application scope", passed: true))
+      if dualDisplays {
+        try await verifyDual(controller, fixture: fixture, original: original, report: &report)
+      } else {
+        await controller.send(.first)
+        try await eventually("First fixture receives focus") {
+          try frames(fixture).contains(where: \.focused)
+        }
+        let tiled = try await settledFrames(fixture)
+        for direction: EngineCommand in [
+          .right, .right, .left, .left, .right, .right, .left, .left,
+        ] {
+          let before = try frames(fixture).first(where: \.focused)?.id
+          let start = ProcessInfo.processInfo.systemUptime
+          await controller.send(direction)
+          try require(
+            try await changedFocus(fixture, from: before, timeout: 3),
+            "Navigation changes native focus")
+          report.commandToObservedFocusMS.append(
+            (ProcessInfo.processInfo.systemUptime - start) * 1000)
+        }
+        report.checks.append(
+          Check(name: "repeated navigation reaches actual native windows", passed: true))
+        let navigated = try frames(fixture)
+        try require(
+          tiled.allSatisfy { old in
+            navigated.contains { $0.id == old.id && abs($0.width - old.width) < 4 }
+          },
+          "Navigation preserved every width")
+        report.checks.append(Check(name: "navigation preserves widths", passed: true))
+        await controller.send(.width)
+        try await eventually("Width preset changes a native frame") {
+          try frames(fixture).contains { new in
+            navigated.contains { $0.id == new.id && abs($0.width - new.width) > 10 }
+          }
+        }
+        report.checks.append(Check(name: "width presets change actual frames", passed: true))
+        let beforeNew = try await settledFrames(fixture)
+        report.frames["beforeNewWindow"] = beforeNew
+        DistributedNotificationCenter.default().postNotificationName(
+          NSNotification.Name("dev.ribbon.fixture.add-window"), object: nil, userInfo: nil,
+          deliverImmediately: true)
+        try await eventually("New fixture enters strip") {
+          let state = try JSONDecoder().decode(EngineState.self, from: await controller.query())
+          let frameCount = try frames(fixture).count
+          return state.windows.count == 5 && frameCount == 5
+        }
+        let afterNew = try await settledFrames(fixture)
+        report.frames["afterNewWindow"] = afterNew
+        try require(
+          beforeNew.allSatisfy { old in
+            afterNew.contains { $0.id == old.id && abs($0.width - old.width) < 4 }
+          },
+          "Opening another window preserved widths")
+        report.checks.append(Check(name: "opening windows preserves existing widths", passed: true))
+        await controller.send(.stack)
+        try await eventually("Stack shares a column") {
+          let current = try frames(fixture)
+          return current.contains { a in
+            current.contains { b in
+              a.id != b.id && abs(a.x - b.x) < 4 && abs(a.y - b.y) > 50
+            }
+          }
+        }
+        report.checks.append(Check(name: "stacking changes real column geometry", passed: true))
+      }
+      try require(
+        try frames(sentinel).elementsEqual(excluded, by: { $0.matches($1) }),
+        "Excluded sentinel remained unchanged")
+      report.checks.append(Check(name: "excluded application never moved", passed: true))
+      await controller.pause()
+      try require(
+        controller.phase == .stopped && !controller.recoveryPending, "Pause completed recovery")
+      try await eventually("Original frames restored") {
+        let current = try frames(fixture)
+        return original.allSatisfy { old in current.contains { $0.id == old.id && $0.matches(old) }
+        }
+      }
+      report.checks.append(Check(name: "pause restores original native frames", passed: true))
+      try require(
+        try frames(sentinel).elementsEqual(excluded, by: { $0.matches($1) }),
+        "Sentinel survives cleanup")
+      await controller.start()
+      try require(controller.phase == .running, "Restart became ready")
+      await controller.pause()
+      try require(!controller.recoveryPending, "Restart restored original frames")
+      report.checks.append(Check(name: "start-pause-start lifecycle", passed: true))
+      try require(
+        !FileManager.default.fileExists(
+          atPath: controller.store.directory.appendingPathComponent("state/paneru/state.json").path),
+        "Title-bearing engine snapshots are disabled")
+      report.checks.append(Check(name: "no title-bearing engine state written", passed: true))
+      report.status = "passed"
+      report.detail =
+        "Disposable fixture applications only. Focus timings include 100 ms reporting cadence; these are not input-to-photon benchmarks."
+    } catch {
+      await controller.pause()
+      report.status = "failed"
+      report.detail = error.localizedDescription
+    }
+    for app in owned { app.terminate() }
+    try? write(report, to: output)
+  }
+
+  static func frames(_ url: URL) throws -> [FixtureFrame] {
+    try JSONDecoder().decode([FixtureFrame].self, from: Data(contentsOf: url))
+  }
+
+  static func settledFrames(_ url: URL) async throws -> [FixtureFrame] {
+    var previous = try frames(url)
+    var stable = 0
+    for _ in 0..<60 {
+      try await Task.sleep(for: .milliseconds(100))
+      let current = try frames(url)
+      let unchanged =
+        current.count == previous.count
+        && current.allSatisfy { frame in
+          previous.contains { old in
+            frame.id == old.id && abs(frame.x - old.x) < 1 && abs(frame.y - old.y) < 1
+              && abs(frame.width - old.width) < 1 && abs(frame.height - old.height) < 1
+          }
+        }
+      stable = unchanged ? stable + 1 : 0
+      if stable >= 3 { return current }
+      previous = current
+    }
+    throw VerificationError.failed("Native frames did not settle")
+  }
+
+  private static func changedFocus(_ url: URL, from id: UInt32?, timeout: TimeInterval) async throws
+    -> Bool
+  {
+    let end = ProcessInfo.processInfo.systemUptime + timeout
+    while ProcessInfo.processInfo.systemUptime < end {
+      if try frames(url).first(where: \.focused)?.id != id { return true }
+      try await Task.sleep(for: .milliseconds(40))
+    }
+    return false
+  }
+
+  static func eventually(_ name: String, condition: () async throws -> Bool) async throws {
+    let end = ProcessInfo.processInfo.systemUptime + 6
+    while ProcessInfo.processInfo.systemUptime < end {
+      if (try? await condition()) == true { return }
+      try await Task.sleep(for: .milliseconds(80))
+    }
+    throw VerificationError.failed(name)
+  }
+
+  static func require(_ condition: Bool, _ message: String) throws {
+    if !condition { throw VerificationError.failed(message) }
+  }
+
+  private static func write(_ report: Report, to url: URL) throws {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    try encoder.encode(report).write(to: url, options: .atomic)
+  }
+}
+
+enum VerificationError: Error, LocalizedError {
+  case failed(String)
+  var errorDescription: String? {
+    if case .failed(let message) = self { return message }
+    return nil
+  }
+}

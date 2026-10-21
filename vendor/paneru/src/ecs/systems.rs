@@ -1185,6 +1185,17 @@ pub(super) fn cleanup_on_exit(
         }
 
         for mut window in &mut all_windows {
+            if let Some(frame) = window
+                .original_frame()
+                .and_then(|original| crate::ribbon::restoration_frame(original, &display_bounds))
+            {
+                window.set_padding(crate::manager::WindowPadding::Vertical(0));
+                window.set_padding(crate::manager::WindowPadding::Horizontal(0));
+                window.resize(frame.size());
+                window.reposition(frame.min);
+                window.resize(frame.size());
+                continue;
+            }
             let frame = window.frame();
             let center = frame.center();
             let bounds = display_bounds

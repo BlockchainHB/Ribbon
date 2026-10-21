@@ -376,6 +376,15 @@ impl Process {
     ///
     /// - Adds or removes KVO observers based on the application's launch and activation state.
     pub fn ready(&mut self) -> bool {
+        let bundle = self
+            .application
+            .as_ref()
+            .and_then(|app| app.bundleIdentifier())
+            .map(|id| id.to_string())
+            .unwrap_or_default();
+        if !crate::ribbon::allows_bundle(&bundle) {
+            return false;
+        }
         if !self.finished_launching() {
             debug!(
                 "{} ({}) is not finished launching, subscribing to finishedLaunching changes",

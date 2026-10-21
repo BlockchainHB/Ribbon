@@ -1,0 +1,184 @@
+{
+  "verified_at": "2026-10-21T00:11:07.297458+00:00",
+  "build": {
+    "version": "0.1.0",
+    "engine": "Paneru 0.5.2",
+    "upstream_commit": "12c58b2225a40e434053ea9343a41e2012466f9a",
+    "signing": "local ad-hoc",
+    "notarized": false,
+    "engine_profile": "release"
+  },
+  "system": "Version 27.0.1 (Build 26A434)",
+  "engine_sha256": "196e13e3fb4cc2c6578de52b2a2e81da23835c79c1f146af17e7a1b5a3817550",
+  "archive_sha256": "17778cc3f9a8b83c27d88983b1fe4e148ee044e280906270440cacd9198541fa",
+  "automated_checks": {
+    "rust_default": {
+      "library": 46,
+      "binary": 447
+    },
+    "rust_shipping_features": {
+      "library": 39,
+      "binary": 364
+    },
+    "swift": 7,
+    "format_and_clippy": "passed",
+    "bundle_signature": "passed",
+    "archive_crc_and_executables": "passed"
+  },
+  "desktop": {
+    "status": "passed",
+    "app": "/Users/neat/Applications/Ribbon.app",
+    "suites": {
+      "single": {
+        "status": "passed",
+        "checks": [
+          {
+            "name": "start and exact application scope",
+            "passed": true
+          },
+          {
+            "name": "repeated navigation reaches actual native windows",
+            "passed": true
+          },
+          {
+            "name": "navigation preserves widths",
+            "passed": true
+          },
+          {
+            "name": "width presets change actual frames",
+            "passed": true
+          },
+          {
+            "name": "opening windows preserves existing widths",
+            "passed": true
+          },
+          {
+            "name": "stacking changes real column geometry",
+            "passed": true
+          },
+          {
+            "name": "excluded application never moved",
+            "passed": true
+          },
+          {
+            "name": "pause restores original native frames",
+            "passed": true
+          },
+          {
+            "name": "start-pause-start lifecycle",
+            "passed": true
+          },
+          {
+            "name": "no title-bearing engine state written",
+            "passed": true
+          }
+        ],
+        "displays": [
+          {
+            "height": 1440,
+            "id": 2,
+            "name": "Kuycon G32P",
+            "scale": 2,
+            "width": 2560,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "height": 1117,
+            "id": 1,
+            "name": "Built-in Retina Display",
+            "scale": 2,
+            "width": 1728,
+            "x": 2560,
+            "y": 323
+          }
+        ],
+        "engineSHA256": "196e13e3fb4cc2c6578de52b2a2e81da23835c79c1f146af17e7a1b5a3817550",
+        "detail": "Disposable fixture applications only. Focus timings include 100 ms reporting cadence; these are not input-to-photon benchmarks."
+      },
+      "dual": {
+        "status": "passed",
+        "checks": [
+          {
+            "name": "start and exact application scope",
+            "passed": true
+          },
+          {
+            "name": "independent strips on both physical displays",
+            "passed": true
+          },
+          {
+            "name": "navigation and overflow do not move the other monitor's windows",
+            "passed": true
+          },
+          {
+            "name": "six physical display transfers preserve proportions and other widths",
+            "passed": true
+          },
+          {
+            "name": "opening a window preserves both monitors' existing widths",
+            "passed": true
+          },
+          {
+            "name": "excluded application never moved",
+            "passed": true
+          },
+          {
+            "name": "pause restores original native frames",
+            "passed": true
+          },
+          {
+            "name": "start-pause-start lifecycle",
+            "passed": true
+          },
+          {
+            "name": "no title-bearing engine state written",
+            "passed": true
+          }
+        ],
+        "displays": [
+          {
+            "height": 1440,
+            "id": 2,
+            "name": "Kuycon G32P",
+            "scale": 2,
+            "width": 2560,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "height": 1117,
+            "id": 1,
+            "name": "Built-in Retina Display",
+            "scale": 2,
+            "width": 1728,
+            "x": 2560,
+            "y": 323
+          }
+        ],
+        "engineSHA256": "196e13e3fb4cc2c6578de52b2a2e81da23835c79c1f146af17e7a1b5a3817550",
+        "detail": "Disposable fixture applications only. Focus timings include 100 ms reporting cadence; these are not input-to-photon benchmarks."
+      }
+    },
+    "watchdog": {
+      "status": "passed",
+      "child_pid": 26317,
+      "exit_observed_ms": 162
+    }
+  },
+  "focus_observations_ms": {
+    "samples": 8,
+    "minimum": 91.93,
+    "median": 97.76,
+    "maximum": 138.47,
+    "note": "Includes 100 ms fixture reporting cadence and CLI transport; not input-to-photon latency."
+  },
+  "unverified": [
+    "Physical unplug/reconnect",
+    "Sleep/wake and clamshell transitions",
+    "Portrait and mixed-refresh-rate hardware",
+    "Trackpad feel",
+    "Native UI visual capture",
+    "Fresh Finder launch permission onboarding"
+  ]
+}
