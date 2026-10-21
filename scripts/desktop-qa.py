@@ -40,7 +40,7 @@ try:
                 result = json.loads(report.read_text())
                 summary["suites"][name] = {
                     key: result[key] for key in
-                    ["status", "checks", "displays", "engineSHA256", "detail"]
+                    ["status", "checks", "displays", "engineSHA256", "motion", "detail"]
                     if key in result
                 }
                 if result["status"] != "passed":

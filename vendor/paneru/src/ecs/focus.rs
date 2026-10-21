@@ -388,7 +388,6 @@ fn mouse_follows_focus(
     window_manager: Res<WindowManager>,
     displays: Query<&Display>,
     workspaces: MouseFocusStrips,
-    restored: Query<&RestoreFocusMarker>,
 ) {
     let entity = *focused;
     let Some(window) = windows.get(entity) else {
@@ -418,14 +417,9 @@ fn mouse_follows_focus(
             .find(|(strip, _, _, _, _, _)| strip.contains(entity))
         && let Ok(display) = displays.get(child.parent())
     {
-        // Project the window's slot onto the strip destination when the window
-        // does not carry its own auto-center target (workspace restore or
-        // auto-center disabled), since the strip moves before its members are
-        // laid out on a following tick.
-        let frame = if (restored.iter().any(|marker| marker.entity == entity)
-            || !config.auto_center())
-            && let Some(layout) = windows.layout_position(entity)
-        {
+        // Members follow the strip as one layout, so project its destination
+        // rather than leaving the pointer at an intermediate animation frame.
+        let frame = if let Some(layout) = windows.layout_position(entity) {
             let origin = layout.0 + reposition.map_or(position.0, |target| target.0);
             IRect::from_corners(origin, origin + frame.size())
         } else {

@@ -8,6 +8,10 @@ final class FixtureDelegate: NSObject, NSApplicationDelegate {
   private var timer: Timer?
   private var observer: NSObjectProtocol?
   private var focusObserver: NSObjectProtocol?
+  private var motionObserver: NSObjectProtocol?
+  private var motionTimer: Timer?
+  private var motionSamples: [[String: Any]] = []
+  private var recordingMotion = false
   private var reportURL: URL?
   private var sentinel = false
   private var dualDisplays = false
@@ -37,6 +41,37 @@ final class FixtureDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         self.writeReport()
+      }
+    }
+    if reportURL != nil && !sentinel {
+      motionObserver = DistributedNotificationCenter.default().addObserver(
+        forName: NSNotification.Name("dev.ribbon.fixture.motion"), object: nil, queue: .main
+      ) { [weak self] notification in
+        let action = notification.object as? String
+        Task { @MainActor in
+          guard let self else { return }
+          if action == "begin" {
+            self.motionSamples = []
+            self.recordingMotion = true
+          } else if action == "end" {
+            self.recordingMotion = false
+            guard
+              let url = self.reportURL?.deletingLastPathComponent()
+                .appendingPathComponent("motion-frames.json"),
+              let data = try? JSONSerialization.data(withJSONObject: self.motionSamples)
+            else { return }
+            try? data.write(to: url, options: .atomic)
+          }
+        }
+      }
+      motionTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) {
+        [weak self] _ in
+        Task { @MainActor in
+          guard let self, self.recordingMotion, self.motionSamples.count < 1200 else { return }
+          self.motionSamples.append([
+            "time": ProcessInfo.processInfo.systemUptime, "frames": self.windowFrames(),
+          ])
+        }
       }
     }
     timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
@@ -77,8 +112,16 @@ final class FixtureDelegate: NSObject, NSApplicationDelegate {
 
   private func writeReport() {
     guard let reportURL else { return }
+    guard
+      let encoded = try? JSONSerialization.data(
+        withJSONObject: windowFrames(), options: [.sortedKeys])
+    else { return }
+    try? encoded.write(to: reportURL, options: .atomic)
+  }
+
+  private func windowFrames() -> [[String: Any]] {
     let top = NSScreen.screens.first?.frame.maxY ?? 0
-    let data: [[String: Any]] = windows.filter(\.isVisible).map { window in
+    return windows.filter(\.isVisible).map { window in
       [
         "id": window.windowNumber, "x": window.frame.minX, "y": top - window.frame.maxY,
         "width": window.frame.width, "height": window.frame.height, "focused": window.isKeyWindow,
@@ -89,9 +132,6 @@ final class FixtureDelegate: NSObject, NSApplicationDelegate {
           .uint32Value ?? 0,
       ]
     }
-    guard let encoded = try? JSONSerialization.data(withJSONObject: data, options: [.sortedKeys])
-    else { return }
-    try? encoded.write(to: reportURL, options: .atomic)
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }

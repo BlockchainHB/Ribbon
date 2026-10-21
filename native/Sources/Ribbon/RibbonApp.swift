@@ -320,7 +320,7 @@ struct ControlPanel: View {
       VStack(alignment: .leading, spacing: 14) {
         Text("Layout & motion").font(.headline)
         HStack {
-          Text("Screen margins").frame(width: 130, alignment: .leading)
+          Text("Window spacing").frame(width: 130, alignment: .leading)
           Slider(
             value: Binding(
               get: { Double(controller.settings.gap) },

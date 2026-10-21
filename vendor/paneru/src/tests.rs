@@ -3,6 +3,7 @@ mod focus_or_virtual;
 mod harness;
 mod interaction;
 mod mocks;
+mod motion;
 mod mouse_focus;
 mod session_restore;
 mod state;

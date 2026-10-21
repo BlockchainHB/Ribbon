@@ -1110,15 +1110,33 @@ pub(super) fn update_overlays(
 
 #[instrument(level = Level::TRACE, skip_all)]
 pub(super) fn commit_window_position(
-    mut moved_windows: Populated<(&mut Window, &Position), Changed<Position>>,
+    mut moved_windows: Populated<(Entity, &mut Window, &Position), Changed<Position>>,
 ) {
-    // `par_iter_mut` runs on `ComputeTaskPool` worker threads, which have no
-    // `CFRunLoop` of their own to drain thread-local autorelease pools.
-    moved_windows
-        .par_iter_mut()
-        .for_each(|(mut window, position)| {
+    // AX writes are separate OS operations. Move leading tiles first so a tile
+    // cannot temporarily cover a neighbor whose old frame has not moved yet.
+    let mut moves = moved_windows
+        .iter_mut()
+        .map(|(entity, window, position)| {
+            let delta = position.0 - window.frame().min;
+            let (step, coordinate) = if delta.x != 0 {
+                (delta.x, position.0.x)
+            } else {
+                (delta.y, position.0.y)
+            };
+            let key = if step > 0 {
+                (true, -i64::from(coordinate))
+            } else {
+                (false, i64::from(coordinate))
+            };
+            (key, entity)
+        })
+        .collect::<Vec<_>>();
+    moves.sort_unstable_by_key(|(key, _)| *key);
+    for (_, entity) in moves {
+        if let Ok((_, mut window, position)) = moved_windows.get_mut(entity) {
             objc2::rc::autoreleasepool(|_| window.reposition(position.0));
-        });
+        }
+    }
 }
 
 #[instrument(level = Level::TRACE, skip_all)]
@@ -1144,6 +1162,21 @@ pub(super) fn verify_window_position(
             entity_commands.try_remove::<VerifyWindowPosition>();
         }
     }
+}
+
+/// Release space before neighbors move into it. Growth is committed after positions.
+#[instrument(level = Level::TRACE, skip_all)]
+pub(super) fn commit_window_shrink(
+    mut resized_windows: Populated<(&mut Window, &Bounds), Changed<Bounds>>,
+) {
+    resized_windows
+        .par_iter_mut()
+        .for_each(|(mut window, bounds)| {
+            let size = window.frame().size().min(bounds.0);
+            if size != window.frame().size() {
+                objc2::rc::autoreleasepool(|_| window.resize(size));
+            }
+        });
 }
 
 #[instrument(level = Level::TRACE, skip_all)]

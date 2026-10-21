@@ -1978,12 +1978,10 @@ fn test_snap_strip_marker_forces_snap_for_under_threshold_move() {
     );
 }
 
-/// Companion regression: the same under-threshold perturbation, without a
-/// `SnapStripMarker`, must still animate exactly as before — the guard from
-/// the test above is name-scoped to the strip, not a blanket behavior
-/// change to `position_layout_windows`.
+/// Members of a strip share its current packed geometry, even without a restore guard.
+/// A displaced member must return to its slot without a separate catch-up animation.
 #[test]
-fn test_under_threshold_move_animates_without_snap_strip_marker() {
+fn test_under_threshold_move_snaps_to_packed_slot() {
     let config: Config = (
         MainOptions {
             virtual_workspace_animations: Some(false),
@@ -2046,25 +2044,20 @@ fn test_under_threshold_move_animates_without_snap_strip_marker() {
         .expect("strip has a Position")
         .set_changed();
 
-    let mut saw_reposition_marker = false;
-    for _ in 0..5 {
-        h.app.update();
-        for e in h.mock_state.drain_events() {
-            h.app.world_mut().write_message::<Event>(e);
-        }
-        if h.app
-            .world_mut()
-            .get::<RepositionMarker>(stack_member)
-            .is_some()
-        {
-            saw_reposition_marker = true;
-            break;
-        }
-    }
-
+    h.app.update();
     assert!(
-        saw_reposition_marker,
-        "without a SnapStripMarker, the under-threshold move must still animate"
+        h.world().get::<RepositionMarker>(stack_member).is_none(),
+        "packed members must not animate independently"
+    );
+    let slot = h
+        .world()
+        .get::<crate::ecs::LayoutPosition>(stack_member)
+        .unwrap()
+        .0;
+    let strip_origin = h.world().get::<Position>(strip_entity).unwrap().0;
+    assert_eq!(
+        h.world().get::<Position>(stack_member).unwrap().0,
+        slot + strip_origin
     );
 }
 
@@ -3618,15 +3611,21 @@ fn test_focus_command_starts_animation_on_first_frame() {
         "active strip should already have advanced on Frame 0"
     );
 
+    let strip_x = strip_pos.x;
     let win0_entity = find_window_entity(0, world);
     let win0_pos = world.get::<Position>(win0_entity).expect("window 0 pos");
     let win0_reposition = world.get::<RepositionMarker>(win0_entity);
     assert!(
-        win0_reposition.is_some(),
-        "window 0 should have RepositionMarker on Frame 0"
+        win0_reposition.is_none(),
+        "window 0 follows the strip without an independent animation"
     );
     assert_ne!(
         win0_pos.x, initial_win0_x,
         "window 0 should already have advanced on Frame 0"
+    );
+    assert_eq!(
+        win0_pos.x - initial_win0_x,
+        strip_x - initial_strip_x,
+        "the window and its strip must advance by the same amount"
     );
 }

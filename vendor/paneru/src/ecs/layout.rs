@@ -1,4 +1,4 @@
-use bevy::app::{App, Plugin, Update};
+use bevy::app::{App, Plugin, PostUpdate, Update};
 use bevy::ecs::change_detection::{DetectChanges, DetectChangesMut, Ref};
 use bevy::ecs::component::Component;
 use bevy::ecs::entity::{Entity, EntityHashMap, EntityHashSet};
@@ -75,6 +75,7 @@ type StripsForWindowPositioning<'w, 's> = Query<
         Option<&'static RepositionMarker>,
         Has<Scrolling>,
         &'static ChildOf,
+        Has<PreviousStripPosition>,
     ),
     With<LayoutStrip>,
 >;
@@ -112,8 +113,11 @@ type RepositionedWindows<'w, 's> = Populated<
         Option<&'static ResizeMarker>,
         Has<AdjacentDisplayParked>,
     ),
-    (Changed<LayoutPosition>, With<Window>, Without<LayoutStrip>),
+    (With<Window>, Without<LayoutStrip>),
 >;
+
+type GeometryChanges<'w, 's> =
+    Query<'w, 's, (), (With<Window>, Or<(Changed<Bounds>, Changed<LayoutPosition>)>)>;
 
 /// Strips whose position or target offset changed this tick.
 type MovedStrips<'w, 's> =
@@ -181,6 +185,18 @@ pub(crate) fn origin_exposing(
 impl Plugin for LayoutEventsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
+            PostUpdate,
+            (
+                position_layout_strips,
+                position_layout_windows.run_if(window_geometry_changed),
+            )
+                .chain()
+                .after(super::systems::animate_resize_entities)
+                .before(super::systems::commit_window_shrink)
+                .in_set(super::PostUpdateSet::Animate)
+                .run_if(not(resource_exists::<Initializing>)),
+        );
+        app.add_systems(
             Update,
             (
                 // Wait for finish_setup before tiling: until then every window
@@ -190,8 +206,6 @@ impl Plugin for LayoutEventsPlugin {
                     layout_strip_changed,
                     reshuffle_layout_strip,
                     ensure_visible_in_strip,
-                    position_layout_strips,
-                    position_layout_windows,
                 )
                     .chain()
                     .in_set(super::UpdateSet::Layout)
@@ -1539,10 +1553,6 @@ struct StripWindowContext {
     swiping: bool,
     display_entity: Entity,
     stacked: bool,
-    /// See [`crate::ecs::workspace::SnapStripMarker`]: forces this window to
-    /// snap directly to its target in `position_layout_windows`, bypassing
-    /// the offscreen/parking magnitude heuristic.
-    snap_settling: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1552,7 +1562,6 @@ fn insert_strip_window_contexts(
     strip_position: Origin,
     swiping: bool,
     display_entity: Entity,
-    snap_settling: bool,
 ) {
     for column in &strip.columns {
         insert_column_window_contexts(
@@ -1562,7 +1571,6 @@ fn insert_strip_window_contexts(
             swiping,
             display_entity,
             matches!(column, Column::Stack(_)),
-            snap_settling,
         );
     }
 }
@@ -1575,7 +1583,6 @@ fn insert_column_window_contexts(
     swiping: bool,
     display_entity: Entity,
     stacked: bool,
-    snap_settling: bool,
 ) {
     match column {
         Column::Single(entity) | Column::Fullscren(entity) => {
@@ -1586,7 +1593,6 @@ fn insert_column_window_contexts(
                     swiping,
                     display_entity,
                     stacked,
-                    snap_settling,
                 },
             );
         }
@@ -1599,7 +1605,6 @@ fn insert_column_window_contexts(
                     swiping,
                     display_entity,
                     stacked,
-                    snap_settling,
                 );
             }
         }
@@ -1612,7 +1617,6 @@ fn insert_column_window_contexts(
                         swiping,
                         display_entity,
                         stacked,
-                        snap_settling,
                     },
                 );
             }
@@ -1628,7 +1632,6 @@ fn insert_stack_item_window_contexts(
     swiping: bool,
     display_entity: Entity,
     stacked: bool,
-    snap_settling: bool,
 ) {
     match item {
         StackItem::Single(entity) => {
@@ -1639,7 +1642,6 @@ fn insert_stack_item_window_contexts(
                     swiping,
                     display_entity,
                     stacked,
-                    snap_settling,
                 },
             );
         }
@@ -1652,12 +1654,16 @@ fn insert_stack_item_window_contexts(
                         swiping,
                         display_entity,
                         stacked,
-                        snap_settling,
                     },
                 );
             }
         }
     }
+}
+
+/// Packing current geometry is only needed while a size, slot or strip origin changes.
+fn window_geometry_changed(windows: GeometryChanges) -> bool {
+    !windows.is_empty()
 }
 
 /// Reacts to changes of logical window layout in the strip and any have been changed, reposition
@@ -1677,24 +1683,46 @@ fn position_layout_windows(
         .map(|(display, _)| display.bounds())
         .collect::<Vec<_>>();
     let mut strip_contexts = EntityHashMap::default();
-    for (strip_entity, layout_strip, Position(strip_position), reposition, swiping, child_of) in
-        &workspaces
+    let mut current_frames = EntityHashMap::default();
+    for (
+        strip_entity,
+        layout_strip,
+        Position(strip_position),
+        reposition,
+        swiping,
+        child_of,
+        hidden,
+    ) in &workspaces
     {
-        let snap_settling = snap_guards.iter().any(|guard| guard.strip == strip_entity);
-        let strip_target = reposition.map_or(*strip_position, |target| target.0);
+        // One animated origin per strip. Member windows follow that same frame;
+        // independent easing lets neighbors catch up at different rates and overlap.
+        let origin = if hidden || snap_guards.iter().any(|guard| guard.strip == strip_entity) {
+            reposition.map_or(*strip_position, |target| target.0)
+        } else {
+            *strip_position
+        };
         insert_strip_window_contexts(
             &mut strip_contexts,
             layout_strip,
-            strip_target,
+            origin,
             swiping,
             child_of.parent(),
-            snap_settling,
         );
+        if let Ok((display, dock)) = displays.get(child_of.parent()) {
+            let height = display.actual_display_bounds(dock, &config).height();
+            let get_frame = |entity| {
+                positioned_windows
+                    .get(entity)
+                    .ok()
+                    .map(|(_, _, _, position, bounds, _, _)| {
+                        IRect::from_corners(position.0, position.0 + bounds.0)
+                    })
+            };
+            current_frames.extend(layout_strip.relative_positions(height, &get_frame));
+        }
     }
 
-    for (entity, window, layout_position, mut position, mut bounds, resize, was_parked) in
-        positioned_windows
-    {
+    for (entity, window, _, mut position, mut bounds, resize, was_parked) in positioned_windows {
         let Some(context) = strip_contexts.get(&entity) else {
             continue;
         };
@@ -1702,17 +1730,13 @@ fn position_layout_windows(
             continue;
         };
         let viewport = display.actual_display_bounds(dock, &config);
-        // Gets 80% of the display height as threshold.
-        let Ok(vertical_move_threshold) = u32::try_from(viewport.height() * 8 / 10) else {
-            continue;
-        };
-
         // Account for per-window horizontal_padding: reposition() adds
         // h_pad to the virtual x, so subtract it here so the OS window
         // lands exactly sliver_width pixels from the screen edge.
         let h_pad = window.horizontal_padding();
-        let target_size = resize.map_or(bounds.0, |resize| resize.0);
-        let mut frame = IRect::from_corners(layout_position.0, layout_position.0 + target_size);
+        let Some(mut frame) = current_frames.get(&entity).copied() else {
+            continue;
+        };
         frame.min += context.strip_position;
         frame.max += context.strip_position;
 
@@ -1773,42 +1797,12 @@ fn position_layout_windows(
         }
 
         if position.0 != frame.min {
-            // Direct-assign (snap) when:
-            //   - The user is actively swiping: windows must track the finger in lockstep.
-            //   - A workspace switch just moved the strip vertically: jumping the full off-screen
-            //   distance should be instantaneous.
-            // Otherwise (programmatic strip animation, or pure layout change), animate toward the
-            // new position so layout changes (swap/add/remove) slide instead of teleport. When the
-            // strip is also being animated, the per-window target is recomputed each tick from the
-            // strip's current position, so the two motions compose: e.g., on swap, the focused
-            // window's target converges back to its old visual position as the strip settles, while
-            // the other window slides past.
-            // Parking and un-parking have to snap as one move. The clamp above
-            // leaves the lower stack members a short hop from their visible
-            // slot, which the distance threshold alone reads as an ordinary
-            // layout change - they would slide across the screen while the
-            // window above them teleports.
-            let parking = frame.min.y >= park_row || position.0.y >= park_row;
-            let offscreen_move =
-                parking || position.0.y.abs_diff(frame.min.y) > vertical_move_threshold;
-            // `snap_settling`: a strip restore only fixes the strip's own
-            // offset instantly - a member window (a lower stack member
-            // especially) can still need a correction that neither
-            // `parking` nor the distance threshold recognizes as
-            // restore-driven, since its last position can land close enough
-            // to its target. See `SnapStripMarker`.
-            if rerouted
-                || was_parked
-                || context.swiping
-                || context.snap_settling
-                || offscreen_move && !config.virtual_workspace_animations()
-            {
-                position.0 = frame.min;
-                if let Ok(mut entity_commands) = commands.get_entity(entity) {
-                    entity_commands.try_remove::<RepositionMarker>();
-                }
-            } else {
-                commands.reposition_entity(entity, frame.min);
+            // Widths have already advanced this tick. Commit their corresponding
+            // slots directly so a shrinking tile cannot cover a returning neighbor.
+            // Reordering snaps instead of sliding columns through one another.
+            position.0 = frame.min;
+            if let Ok(mut entity_commands) = commands.get_entity(entity) {
+                entity_commands.try_remove::<RepositionMarker>();
             }
         }
     }
@@ -1910,8 +1904,8 @@ mod tests {
         assert_eq!(
             harness
                 .world()
-                .get::<RepositionMarker>(survivor)
-                .map(|marker| marker.0),
+                .get::<Position>(survivor)
+                .map(|position| position.0),
             Some(Origin::new(80, 20)),
             "an orphaned window must not stop another display's layout update"
         );
@@ -1955,8 +1949,8 @@ mod tests {
         assert_eq!(
             harness
                 .world()
-                .get::<RepositionMarker>(survivor)
-                .map(|marker| marker.0),
+                .get::<Position>(survivor)
+                .map(|position| position.0),
             Some(Origin::new(120, 20)),
             "a stale display parent must not stop another display's layout update"
         );
@@ -2067,14 +2061,7 @@ mod tests {
         let strip_position = Origin::new(10, 20);
         let mut contexts = EntityHashMap::default();
 
-        insert_strip_window_contexts(
-            &mut contexts,
-            &strip,
-            strip_position,
-            true,
-            display_entity,
-            false,
-        );
+        insert_strip_window_contexts(&mut contexts, &strip, strip_position, true, display_entity);
 
         let stacked_leader = contexts.get(&entities[0]).unwrap();
         let stacked_follower = contexts.get(&entities[1]).unwrap();

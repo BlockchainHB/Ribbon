@@ -25,6 +25,7 @@ enum DesktopVerification {
     var status = "running"
     var system = ProcessInfo.processInfo.operatingSystemVersionString
     var checks: [Check] = []
+    var motion: [MotionObservation] = []
     var commandToObservedFocusMS: [Double] = []
     var frames: [String: [FixtureFrame]] = [:]
     var detail: String?
@@ -113,6 +114,7 @@ enum DesktopVerification {
       if dualDisplays {
         try await verifyDual(controller, fixture: fixture, original: original, report: &report)
       } else {
+        try await verifyMotion(controller, fixture: fixture, report: &report)
         await controller.send(.first)
         try await eventually("First fixture receives focus") {
           try frames(fixture).contains(where: \.focused)
@@ -169,11 +171,13 @@ enum DesktopVerification {
           let current = try frames(fixture)
           return current.contains { a in
             current.contains { b in
-              a.id != b.id && abs(a.x - b.x) < 4 && abs(a.y - b.y) > 50
+              a.id != b.id && abs(a.x - b.x) < 4
+                && abs(b.y - (a.y + a.height) - Double(controller.settings.windowPadding * 2)) < 2
             }
           }
         }
-        report.checks.append(Check(name: "stacking changes real column geometry", passed: true))
+        report.checks.append(
+          Check(name: "stacking preserves the configured vertical gap", passed: true))
       }
       try require(
         try frames(sentinel).elementsEqual(excluded, by: { $0.matches($1) }),

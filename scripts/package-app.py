@@ -20,8 +20,8 @@ def bundle(path, name, identifier, executable, source):
     plist = {
         "CFBundleIdentifier": identifier, "CFBundleName": name,
         "CFBundleDisplayName": name, "CFBundleExecutable": executable,
-        "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.1.0",
-        "CFBundleVersion": "1", "LSMinimumSystemVersion": "15.0",
+        "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.1.1",
+        "CFBundleVersion": "2", "LSMinimumSystemVersion": "15.0",
         "NSHighResolutionCapable": True, "NSPrincipalClass": "NSApplication",
     }
     if identifier == "dev.ribbon.app":
@@ -39,7 +39,7 @@ license_text = (root / "vendor/paneru/LICENSE.txt").read_text()
     "Ribbon includes Paneru 0.5.2, commit 12c58b2225a40e434053ea9343a41e2012466f9a.\n"
     "https://github.com/karinushka/paneru\nLocal integration changes: vendor/paneru/RIBBON.md\n\n" + license_text)
 (resources / "BUILD.json").write_text(json.dumps({
-    "version": "0.1.0", "engine": "Paneru 0.5.2",
+    "version": "0.1.1", "engine": "Paneru 0.5.2",
     "upstream_commit": "12c58b2225a40e434053ea9343a41e2012466f9a",
     "signing": "local ad-hoc", "notarized": False,
     "engine_profile": engine.parent.name,

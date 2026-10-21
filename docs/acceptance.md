@@ -36,7 +36,10 @@ document titles or window contents. No accounts, analytics or network service.
 Require passing upstream deterministic tests plus focused tests for added scope,
 parent lifecycle, configuration, command execution and recovery behavior. Verify
 with real fixture windows: startup, focus navigation, width preservation, rapid
-commands, stacking, pause restoration, restart and parent termination.
+commands, stacking, pause restoration, restart and parent termination. Sample
+actual frames during scrolling and resizing on each monitor to catch temporary
+overlap; check the configured gap both between columns and in stacks. Reordering
+must place tiles in their new slots without animating through neighboring tiles.
 
 Record AX trust, actual desktop results and performance observations separately.
 Dual-display behavior is defined in [dual-monitor.md](dual-monitor.md) and is

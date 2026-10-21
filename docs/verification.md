@@ -1,6 +1,6 @@
 # Local beta verification — 20 October 2026
 
-Ribbon 0.1.0 was built, installed and verified as a local ad-hoc signed app.
+Ribbon 0.1.1 was built, installed and verified as a local ad-hoc signed app.
 The installed optimized engine and native executable match the delivered ZIP.
 The machine-readable results, artifact hashes and physical checks are in
 [verification.json](verification.json).
@@ -9,8 +9,8 @@ The machine-readable results, artifact hashes and physical checks are in
 
 | Check | Result |
 | --- | --- |
-| Rust default features | 46 library + 447 binary tests passed |
-| Rust shipping configuration, without Lua | 39 library + 364 binary tests passed |
+| Rust default features | 46 library + 448 binary tests passed |
+| Rust shipping configuration, without Lua | 39 library + 365 binary tests passed |
 | Native core | 7 tests passed |
 | Rust formatting and Clippy, warnings denied | Passed |
 | Swift formatting | Passed |
@@ -22,10 +22,11 @@ separately rather than added to a unique test count.
 
 ## Actual desktop checks
 
-The installed release passed 10 single-strip checks and 9 dual-display checks
+The installed release passed 11 single-strip checks and 11 dual-display checks
 using disposable test windows and an excluded sentinel. The suite verifies:
 
-- Exact application scope, native focus navigation, width changes and stacking.
+- Exact application scope, native focus navigation, width changes and a 12 pt vertical stack gap.
+- Intermediate native frames during scrolling and resizing on both monitors.
 - Independent strips and shared-edge overflow on both physical monitors.
 - Full width and height using the selected monitor's usable dimensions.
 - Six display transfers preserving width proportions and other windows' widths.
@@ -39,9 +40,28 @@ come from the fixture's own NSWindows; engine ownership is checked separately.
 Focus observations include the fixture's 100 ms reporting cadence and CLI
 transport. They do not establish input-to-photon latency or language superiority.
 
-An isolated windowless helper became ready; its exit was observed 162 ms after
-the owning process returned. That observation verifies parent lifetime; it is separate
-from the real-window graceful pause/restoration checks.
+The windowless parent-lifetime check also passed; its current polling observation
+is recorded in verification.json. It is separate from the real-window graceful
+pause/restoration checks.
+
+The overlap fix was reproduced before changing product code: a full-width tile
+shrinking toward its next preset covered a returning neighbor in native frame
+samples. The engine now packs each animation frame from current widths and one
+strip origin, and commits AX operations in shrink / ordered movement / growth
+phases. The default 12 pt setting applies between tiles and at screen edges.
+Reordering snaps to new slots instead of animating tiles through each other.
+
+The installed optimized release retained a minimum 12 pt gap across 654 sampled
+frames (single strip plus both physical monitors), with no observed tile overlap.
+Reports are in build/qa/spacing-release-acceptance. All 22 desktop checks passed.
+
+The motion fixture samples its own NSWindow frames on a nominal 60 Hz timer;
+these are sampled geometry observations, not compositor or visual proof. Only
+tiles with most of their area on the display are included. Parked edge slivers
+share their parking location and are excluded; display ownership remains a
+separate check. Raw motion samples and minimum gaps are retained in the QA output.
+The deterministic regression checks each simulated 20 ms frame through navigation,
+growth, shrink, stacking and reordering, while asserting resizing still animates.
 
 All desktop tests used explicit demo scope. Other window managers and system
 display/gesture preferences were left unchanged.

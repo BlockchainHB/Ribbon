@@ -1,7 +1,7 @@
 {
-  "verified_at": "2026-10-21T00:11:07.297458+00:00",
+  "verified_at": "2026-10-21T00:29:51.703938+00:00",
   "build": {
-    "version": "0.1.0",
+    "version": "0.1.1",
     "engine": "Paneru 0.5.2",
     "upstream_commit": "12c58b2225a40e434053ea9343a41e2012466f9a",
     "signing": "local ad-hoc",
@@ -9,16 +9,16 @@
     "engine_profile": "release"
   },
   "system": "Version 27.0.1 (Build 26A434)",
-  "engine_sha256": "196e13e3fb4cc2c6578de52b2a2e81da23835c79c1f146af17e7a1b5a3817550",
-  "archive_sha256": "17778cc3f9a8b83c27d88983b1fe4e148ee044e280906270440cacd9198541fa",
+  "engine_sha256": "5a2df862a012ac02a9f5d04febe4c8bd7018e6817495ff46c0a06d7571037dff",
+  "archive_sha256": "eae790cc0e38eccfa782fd976457489f97583f903382d5c9a7ac3652db29a013",
   "automated_checks": {
     "rust_default": {
       "library": 46,
-      "binary": 447
+      "binary": 448
     },
     "rust_shipping_features": {
       "library": 39,
-      "binary": 364
+      "binary": 365
     },
     "swift": 7,
     "format_and_clippy": "passed",
@@ -34,6 +34,10 @@
         "checks": [
           {
             "name": "start and exact application scope",
+            "passed": true
+          },
+          {
+            "name": "moving tiles remain separated on display 2",
             "passed": true
           },
           {
@@ -53,7 +57,7 @@
             "passed": true
           },
           {
-            "name": "stacking changes real column geometry",
+            "name": "stacking preserves the configured vertical gap",
             "passed": true
           },
           {
@@ -93,7 +97,16 @@
             "y": 323
           }
         ],
-        "engineSHA256": "196e13e3fb4cc2c6578de52b2a2e81da23835c79c1f146af17e7a1b5a3817550",
+        "engineSHA256": "5a2df862a012ac02a9f5d04febe4c8bd7018e6817495ff46c0a06d7571037dff",
+        "motion": [
+          {
+            "displayID": 2,
+            "minimumGap": 12,
+            "movingSamples": 62,
+            "samples": 224,
+            "settledGap": 12
+          }
+        ],
         "detail": "Disposable fixture applications only. Focus timings include 100 ms reporting cadence; these are not input-to-photon benchmarks."
       },
       "dual": {
@@ -105,6 +118,14 @@
           },
           {
             "name": "independent strips on both physical displays",
+            "passed": true
+          },
+          {
+            "name": "moving tiles remain separated on display 2",
+            "passed": true
+          },
+          {
+            "name": "moving tiles remain separated on display 1",
             "passed": true
           },
           {
@@ -156,21 +177,38 @@
             "y": 323
           }
         ],
-        "engineSHA256": "196e13e3fb4cc2c6578de52b2a2e81da23835c79c1f146af17e7a1b5a3817550",
+        "engineSHA256": "5a2df862a012ac02a9f5d04febe4c8bd7018e6817495ff46c0a06d7571037dff",
+        "motion": [
+          {
+            "displayID": 2,
+            "minimumGap": 12,
+            "movingSamples": 61,
+            "samples": 218,
+            "settledGap": 12
+          },
+          {
+            "displayID": 1,
+            "minimumGap": 12,
+            "movingSamples": 57,
+            "samples": 212,
+            "settledGap": 12
+          }
+        ],
         "detail": "Disposable fixture applications only. Focus timings include 100 ms reporting cadence; these are not input-to-photon benchmarks."
       }
     },
     "watchdog": {
       "status": "passed",
-      "child_pid": 26317,
-      "exit_observed_ms": 162
-    }
+      "child_pid": 34012,
+      "exit_observed_ms": 227
+    },
+    "evidence_directory": "build/qa/spacing-release-acceptance"
   },
   "focus_observations_ms": {
     "samples": 8,
-    "minimum": 91.93,
-    "median": 97.76,
-    "maximum": 138.47,
+    "minimum": 56.13,
+    "median": 96.7,
+    "maximum": 138.14,
     "note": "Includes 100 ms fixture reporting cadence and CLI transport; not input-to-photon latency."
   },
   "unverified": [
@@ -180,5 +218,16 @@
     "Trackpad feel",
     "Native UI visual capture",
     "Fresh Finder launch permission onboarding"
-  ]
+  ],
+  "native_sha256": "f065c663ad8b93552aa1a89081f77d96f5c2632b7b7d034671ffe488190ecaa5",
+  "motion_regression": {
+    "baseline_evidence_directory": "build/qa/spacing-baseline",
+    "baseline_observed_overlap_points": 638,
+    "sampling": "Fixture NSWindow frames on a nominal 60 Hz timer; not compositor or visual capture.",
+    "scope": "Columns with more than half their area on their owning display; parked slivers excluded.",
+    "release_samples": 654,
+    "release_minimum_gap_points": 12,
+    "release_settled_gap_points": 12,
+    "deterministic": "20 ms simulated frame regression covers navigation, growth, shrink, stacking and reordering, and retains resize animation."
+  }
 }

@@ -31,6 +31,10 @@ Control–Option + horizontal scroll slides the strip.
 Each display has an independent strip. Control–Option–N transfers the focused
 window and preserves its width proportion on the destination screen.
 
+Window spacing defaults to 12 pt between tiles and at screen edges. The setting
+applies horizontally and vertically; scrolling and resizing keep a shared strip
+geometry. Reordering snaps to the new order instead of crossing other tiles.
+
 ## Verification
 
 Results for the installed release: [docs/verification.md](docs/verification.md).

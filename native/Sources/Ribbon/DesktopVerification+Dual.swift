@@ -17,6 +17,7 @@ extension DesktopVerification {
 
     for group in groups.values {
       try await focusFixture(group[0].id, fixture: fixture, controller: controller)
+      try await verifyMotion(controller, fixture: fixture, report: &report)
       let state = try JSONDecoder().decode(EngineState.self, from: await controller.query())
       let ordered = state.windows.filter { $0.displayID == group[0].screenID }
       try require(ordered.count == 4, "Selected monitor retains four columns")
@@ -65,11 +66,12 @@ extension DesktopVerification {
     await controller.send(.width)
     let beforeMove = try await settledFrames(fixture)
     let moving = beforeMove.first { $0.id == source.id }!
+    let padding = Double(controller.settings.windowPadding * 2)
     let screenWidths = Dictionary(
       uniqueKeysWithValues: NSScreen.screens.map {
         (
           ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as! NSNumber).uint32Value,
-          $0.visibleFrame.width - Double(controller.settings.gap * 2)
+          $0.visibleFrame.width - Double(controller.settings.gap * 2) + padding
         )
       })
     let targetID = groups.keys.first { $0 != source.screenID }!
@@ -80,7 +82,9 @@ extension DesktopVerification {
       }
       let transferred = try await settledFrames(fixture)
       let moved = transferred.first { $0.id == source.id }!
-      let expectedWidth = moving.width / screenWidths[source.screenID]! * screenWidths[targetID]!
+      let expectedWidth =
+        (moving.width + padding) / screenWidths[source.screenID]! * screenWidths[targetID]!
+        - padding
       try require(
         abs(moved.width - expectedWidth) < 4,
         "Transfer preserves the width proportion on a differently sized display")
