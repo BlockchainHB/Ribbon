@@ -11,6 +11,10 @@ pub(crate) struct CompactParked {
     pub size_limit: IVec2,
 }
 
+/// One native commit fence: make room before a parked body returns to view.
+#[derive(Component)]
+pub(crate) struct NativeReveal;
+
 /// A clipped native presentation. The strip retains the full logical width.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct EdgePresentation {
@@ -106,6 +110,9 @@ pub(super) fn update_native_presentation(
         } else {
             commands.entity(entity).try_remove::<EdgePresentation>();
         }
+    }
+    if was_parked && presentation.parking_limit.is_none() {
+        commands.entity(entity).try_insert(NativeReveal);
     }
     update_parking_state(commands, entity, presentation.parking_limit, was_parked);
     presentation.parking_limit.is_none()

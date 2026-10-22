@@ -7,6 +7,26 @@ controls and build 14's motion improvements remain. The installed app is
 It is Developer ID signed and not notarized. Current hashes, receipts and
 limitations are in [verification.json](verification.json).
 
+## Measured engine performance — 22 October 2026
+
+[Implementation and controlled results](engine-performance.md). The same signed
+binary passed four alternating 16-check native runs on both connected monitors.
+Optimized mode reduced median size writes 77.5%, frame queries 87.8%, active-frame
+work 56.7% and engine CPU 32.5%; input-latency bounds stayed roughly the same.
+The broader suite passed 18 single-display / 20 dual-display checks; pairing
+passed 14 checks. Light/dark overview captures were inspected. All automated
+window management remained restricted to disposable fixtures.
+
+`scripts/verify.sh` passed 501/418 engine, 46/39 library and 26 Swift tests, plus
+format, strict Clippy, generated configuration and signatures. Evidence:
+`build/perf-final-verify.log`, `build/qa/performance-comparison.json`,
+`build/qa/perf-desktop-verified/summary.json`, and
+`build/qa/perf-pairing-verified/report.json`.
+The installed engine SHA-256 is
+`883411609ccf9b5b265fff13fc039504ae2000d088442127ce887d52a97150ea`.
+Native samples establish geometry correctness, not compositor FPS or busy
+third-party redraw cost. Normal Ribbon was reopened paused after installation.
+
 ## Pairing (build 16)
 
 [Behavior and usage](pairing.md). `scripts/verify.sh` passed: 46+483 default Rust,

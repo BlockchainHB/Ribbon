@@ -680,6 +680,7 @@ impl InputHandler {
                 self.config.find_keybind(keycode, mask)
             })
             .and_then(|command| {
+                crate::performance::input_received();
                 events
                     .send(Event::Command { command })
                     .inspect_err(|err| error!("Error sending command: {err}"))

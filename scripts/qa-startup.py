@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check maximized startup/reveal/recovery using disposable windows only."""
+"""Check startup/recovery, or --general desktop motion, using disposable windows only."""
 import json
 from pathlib import Path
 import subprocess
@@ -12,6 +12,9 @@ if subprocess.run(["pgrep", "-x", "Ribbon"], capture_output=True).returncode == 
     raise SystemExit("Quit Ribbon before running isolated startup QA")
 subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], check=True)
 output.mkdir(parents=True, exist_ok=False)
+if len(sys.argv) > 3 and sys.argv[3] != "--general":
+    raise SystemExit("Usage: qa-startup.py SIGNED_APP FRESH_OUTPUT [--general]")
+suite_flags = [] if len(sys.argv) > 3 else ["--qa-maximized-startup"]
 summary = {"status": "running", "suites": {}}
 
 
@@ -62,7 +65,7 @@ try:
         report = directory / "report.json"
         with (directory / "process.log").open("w") as log:
             process = subprocess.Popen(
-                [str(app / "Contents/MacOS/Ribbon"), "--qa-maximized-startup",
+                [str(app / "Contents/MacOS/Ribbon"), *suite_flags,
                  "--qa-external-input", "--qa-output", str(report), *flags],
                 stdout=log, stderr=log,
             )

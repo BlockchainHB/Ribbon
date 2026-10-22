@@ -48,10 +48,12 @@ public struct EngineState: Decodable, Sendable {
     public let floating: Bool
     public let visible: Bool?
     public let displayID: UInt32?
+    /// Read-only logical bounds supplied by the engine, before native edge fitting.
+    public let frame: WindowFrame?
     enum CodingKeys: String, CodingKey {
       case windowID = "window_id"
       case bundleID = "bundle_id"
-      case floating, visible
+      case floating, visible, frame
       case displayID = "display_id"
     }
   }

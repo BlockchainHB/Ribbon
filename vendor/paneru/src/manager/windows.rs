@@ -1,8 +1,8 @@
 use accessibility_sys::{
-    AXUIElementCreateApplication, AXUIElementRef, AXValueCreate, AXValueGetValue,
-    kAXErrorAttributeUnsupported, kAXErrorNoValue, kAXErrorSuccess, kAXFloatingWindowSubrole,
-    kAXPositionAttribute, kAXRaiseAction, kAXSizeAttribute, kAXStandardWindowSubrole,
-    kAXUnknownRole, kAXUnknownSubrole, kAXValueTypeCGPoint, kAXValueTypeCGSize, kAXWindowRole,
+    AXUIElementCreateApplication, AXUIElementRef, AXValueCreate, kAXErrorAttributeUnsupported,
+    kAXErrorNoValue, kAXErrorSuccess, kAXFloatingWindowSubrole, kAXPositionAttribute,
+    kAXRaiseAction, kAXSizeAttribute, kAXStandardWindowSubrole, kAXUnknownRole, kAXUnknownSubrole,
+    kAXValueTypeCGPoint, kAXValueTypeCGSize, kAXWindowRole,
 };
 use bevy::ecs::component::Component;
 use bevy::math::IRect;
@@ -10,8 +10,8 @@ use core::ptr::NonNull;
 use derive_more::{DerefMut, with_trait::Deref};
 use mockall::automock;
 use objc2_core_foundation::{
-    CFArray, CFBoolean, CFNumber, CFRetained, CFString, CFType, CGPoint, CGRect, CGSize,
-    kCFBooleanFalse, kCFBooleanTrue,
+    CFArray, CFBoolean, CFNumber, CFRetained, CFString, CFType, CGPoint, CGSize, kCFBooleanFalse,
+    kCFBooleanTrue,
 };
 use std::collections::HashMap;
 use std::ptr::null_mut;
@@ -377,6 +377,7 @@ pub struct WindowOS {
     id: WinID,
     ax_element: CFRetained<AXUIWrapper>,
     frame: IRect,
+    frame_reader: super::frame::FrameReader,
     original_frame: Option<IRect>,
     vertical_padding: i32,
     horizontal_padding: i32,
@@ -448,6 +449,7 @@ impl WindowOS {
             id,
             ax_element: element.clone(),
             frame: IRect::default(),
+            frame_reader: super::frame::FrameReader::default(),
             original_frame: None,
             vertical_padding: 0,
             horizontal_padding: 0,
@@ -614,6 +616,7 @@ impl WindowOS {
     }
 
     fn set_ax_position(&mut self, origin: Origin) {
+        let _measurement = crate::performance::measure(crate::performance::Metric::PositionWrite);
         let mut point = CGPoint::new(
             f64::from(origin.x + self.horizontal_padding),
             f64::from(origin.y + self.vertical_padding),
@@ -641,6 +644,7 @@ impl WindowOS {
                 );
                 return;
             }
+            crate::performance::geometry_written();
             let size = self.frame.size();
             self.frame.min = origin;
             self.frame.max = origin + size;
@@ -648,6 +652,7 @@ impl WindowOS {
     }
 
     fn set_ax_size(&mut self, size: Size) {
+        let _measurement = crate::performance::measure(crate::performance::Metric::SizeWrite);
         let width_padding = 2 * self.horizontal_padding;
         let height_padding = 2 * self.vertical_padding;
         let mut cgsize = CGSize::new(
@@ -661,13 +666,16 @@ impl WindowOS {
             )
         };
         if let Ok(size_value) = AXUIWrapper::from_retained(size_ref) {
-            unsafe {
+            let status = unsafe {
                 AXUIElementSetAttributeValue(
                     self.ax_element.as_ptr(),
                     CFString::from_static_str(kAXSizeAttribute).as_ref(),
                     size_value.as_ref(),
                 )
             };
+            if status == kAXErrorSuccess {
+                crate::performance::geometry_written();
+            }
             self.frame.max = self.frame.min + size;
         }
     }
@@ -881,45 +889,8 @@ impl WindowApi for WindowOS {
     ///
     /// `Ok(())` if the frame is updated successfully, otherwise `Err(Error)`.
     fn update_frame(&mut self) -> Result<IRect> {
-        let window_ref = self.ax_element.as_ptr();
-
-        let position = unsafe {
-            let mut position_ref: *mut CFType = null_mut();
-            AXUIElementCopyAttributeValue(
-                window_ref,
-                CFString::from_static_str(kAXPositionAttribute).as_ref(),
-                &mut position_ref,
-            )
-            .to_result(function_name!())?;
-            AXUIWrapper::from_retained(position_ref)?
-        };
-        let size = unsafe {
-            let mut size_ref: *mut CFType = null_mut();
-            AXUIElementCopyAttributeValue(
-                window_ref,
-                CFString::from_static_str(kAXSizeAttribute).as_ref(),
-                &mut size_ref,
-            )
-            .to_result(function_name!())?;
-            AXUIWrapper::from_retained(size_ref)?
-        };
-
-        let mut frame = CGRect::default();
-        unsafe {
-            AXValueGetValue(
-                position.as_ptr(),
-                kAXValueTypeCGPoint,
-                NonNull::from(&mut frame.origin).as_ptr().cast(),
-            );
-            AXValueGetValue(
-                size.as_ptr(),
-                kAXValueTypeCGSize,
-                NonNull::from(&mut frame.size).as_ptr().cast(),
-            );
-        }
-        // if (CGRectEqualToRect(new_frame, window->frame)) {
-        //     debug("%s:DEBOUNCED %s %d\n", __FUNCTION__, window->application->name, window->id);
-        // }
+        let _measurement = crate::performance::measure(crate::performance::Metric::FrameRead);
+        let frame = self.frame_reader.read(&self.ax_element)?;
         self.frame = irect_from(frame);
 
         self.frame.min.x -= self.horizontal_padding;
@@ -975,6 +946,7 @@ impl WindowApi for WindowOS {
     /// Focuses the window and raises it to the front.
     #[instrument(level = Level::DEBUG)]
     fn focus_with_raise(&self, psn: ProcessSerialNumber) {
+        let _measurement = crate::performance::measure(crate::performance::Metric::Focus);
         let window_id = self.id();
         unsafe {
             _SLPSSetFrontProcessWithOptions(&psn, window_id, CPS_USER_GENERATED);

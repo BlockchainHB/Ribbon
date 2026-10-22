@@ -25,7 +25,9 @@ use super::{
 
 use crate::config::{Config, decorations::BorderRadiusOption};
 use crate::ecs::display::FloatingLayer;
-use crate::ecs::layout::parking::{CompactParked, EdgePresentation, NativeMinimumWidth};
+use crate::ecs::layout::parking::{
+    CompactParked, EdgePresentation, NativeMinimumWidth, NativeReveal,
+};
 use crate::ecs::layout::{Column, LayoutStrip};
 use crate::ecs::params::{ActiveDisplay, FrameActivity, Windows};
 use crate::ecs::{
@@ -93,6 +95,20 @@ type MovingStrips<'w, 's> =
 
 // Parked native windows may be constrained to the parking display's size.
 // Only logical bounds animate there; commit native size when revealed again.
+type NativePositionWindows<'w, 's> = Populated<
+    'w,
+    's,
+    (
+        Entity,
+        &'static mut Window,
+        &'static Position,
+        Option<&'static CompactParked>,
+        Option<&'static VerifyWindowPosition>,
+        Has<NativeReveal>,
+    ),
+    Changed<Position>,
+>;
+
 type NativeResizeFilter = (
     Or<(Changed<Bounds>, Changed<EdgePresentation>)>,
     Without<CompactParked>,
@@ -606,6 +622,7 @@ pub(super) fn animate_entities(
     animate: Populated<(&mut Position, Entity, &RepositionMarker)>,
     time: Res<Time>,
     config: Res<Config>,
+    cadence: super::motion::MotionCadence,
     mut commands: Commands,
     mut motion: Local<EntityHashMap<super::motion::Motion>>,
 ) {
@@ -619,13 +636,16 @@ pub(super) fn animate_entities(
                 *origin,
                 config.animation_speed(),
                 time.delta_secs_f64(),
+                cadence.interval_for(entity),
             );
 
             trace!(
                 "entity {entity} source {} dest {origin} moving to {new_pos}",
                 position.0,
             );
-            position.0 = new_pos;
+            if position.0 != new_pos {
+                position.0 = new_pos;
+            }
             if finished && let Ok(mut entity_commands) = commands.get_entity(entity) {
                 motion.remove(&entity);
                 entity_commands.try_remove::<RepositionMarker>();
@@ -648,6 +668,7 @@ pub(super) fn animate_resize_entities(
     animate: Populated<(&mut Bounds, Entity, &ResizeMarker)>,
     time: Res<Time>,
     config: Res<Config>,
+    cadence: super::motion::MotionCadence,
     mut commands: Commands,
     mut motion: Local<EntityHashMap<super::motion::Motion>>,
 ) {
@@ -661,13 +682,16 @@ pub(super) fn animate_resize_entities(
                 *size,
                 config.animation_speed(),
                 time.delta_secs_f64(),
+                cadence.interval_for(entity),
             );
 
             trace!(
                 "entity {entity} source {} dest {size} resizing to {new_size}",
                 bounds.0,
             );
-            bounds.0 = new_size;
+            if bounds.0 != new_size {
+                bounds.0 = new_size;
+            }
             if finished && let Ok(mut entity_commands) = commands.get_entity(entity) {
                 motion.remove(&entity);
                 entity_commands.try_remove::<ResizeMarker>();
@@ -1131,16 +1155,15 @@ pub(super) fn update_overlays(
 
 #[instrument(level = Level::TRACE, skip_all)]
 pub(super) fn commit_window_position(
-    mut moved_windows: Populated<
-        (Entity, &mut Window, &Position, Option<&CompactParked>),
-        Changed<Position>,
-    >,
+    mut moved_windows: NativePositionWindows,
+    mut commands: Commands,
 ) {
+    let _measurement = crate::performance::measure(crate::performance::Metric::Move);
     // AX writes are separate OS operations. Move leading tiles first so a tile
     // cannot temporarily cover a neighbor whose old frame has not moved yet.
     let mut moves = moved_windows
         .iter_mut()
-        .map(|(entity, window, position, _)| {
+        .map(|(entity, window, position, parked, _, revealing)| {
             let delta = position.0 - window.frame().min;
             let (step, coordinate) = if delta.x != 0 {
                 (delta.x, position.0.x)
@@ -1152,12 +1175,24 @@ pub(super) fn commit_window_position(
             } else {
                 (false, i64::from(coordinate))
             };
-            (key, entity)
+            // Artificial parking coordinates reverse the apparent direction of
+            // a returning left neighbor. Move visible leaders out of its slot
+            // before revealing it; park departing bodies before either group.
+            let phase = if parked.is_some() {
+                0
+            } else if revealing {
+                2
+            } else {
+                1
+            };
+            ((phase, key), entity)
         })
         .collect::<Vec<_>>();
     moves.sort_unstable_by_key(|(key, _)| *key);
     for (_, entity) in moves {
-        if let Ok((_, mut window, position, parked)) = moved_windows.get_mut(entity) {
+        if let Ok((_, mut window, position, parked, verification, revealing)) =
+            moved_windows.get_mut(entity)
+        {
             objc2::rc::autoreleasepool(|_| {
                 if let Some(parking) = parked {
                     // Fit the native presentation before changing displays. Otherwise
@@ -1169,7 +1204,12 @@ pub(super) fn commit_window_position(
                     }
                 }
                 window.reposition(position.0);
-                if parked.is_some() {
+                if revealing {
+                    commands.entity(entity).try_remove::<NativeReveal>();
+                }
+                // New parking is read back by verify_window_position immediately
+                // after this system. Do not issue the same native query twice.
+                if parked.is_some() && verification.is_none() {
                     match window.update_frame() {
                         Ok(actual) => debug!(window_id = window.id(), requested = ?position.0,
                             ?actual, "compact parking readback"),
@@ -1223,6 +1263,7 @@ pub(super) fn commit_window_shrink(
     >,
     mut commands: Commands,
 ) {
+    let _measurement = crate::performance::measure(crate::performance::Metric::Shrink);
     resized_windows
         .par_iter_mut()
         .for_each(|(_, mut window, bounds, _, edge)| {
@@ -1261,6 +1302,7 @@ pub(super) fn commit_window_size(
     active_display: ActiveDisplay,
     mut resized_windows: NativeSizeWindows,
 ) {
+    let _measurement = crate::performance::measure(crate::performance::Metric::Grow);
     let display_bounds = active_display.bounds();
     resized_windows
         .par_iter_mut()
@@ -1276,7 +1318,7 @@ pub(super) fn commit_window_size(
 /// Restores user-visible window state before Paneru shuts down: clears any
 /// brightness dim, removes the dim/border overlay window, and centers every
 /// managed window on the display its frame center falls in.
-pub(super) fn cleanup_on_exit(
+pub(crate) fn cleanup_on_exit(
     mut exit_events: MessageReader<AppExit>,
     mut all_windows: Query<&mut Window>,
     displays: Query<&Display>,
@@ -1762,6 +1804,47 @@ mod tests {
 mod geometry_echo_tests {
     use super::*;
     use crate::tests::{TEST_WORKSPACE_ID, TestHarness, find_window_entity};
+
+    #[test]
+    fn returning_left_neighbor_waits_for_visible_leader_to_move_aside() {
+        use crate::manager::MockWindowApi;
+        use std::sync::{Arc, Mutex};
+        let writes = Arc::new(Mutex::new(Vec::new()));
+        let mut world = bevy::prelude::World::new();
+        let mut returning = None;
+        for (id, frame, target, revealing) in [
+            (
+                0,
+                IRect::new(6, 24, 2554, 1446),
+                bevy::math::IVec2::new(249, 24),
+                false,
+            ),
+            (
+                1,
+                IRect::new(4281, 1305, 4524, 2304),
+                bevy::math::IVec2::new(6, 24),
+                true,
+            ),
+        ] {
+            let mut api = MockWindowApi::new();
+            api.expect_frame().return_const(frame);
+            let writes = writes.clone();
+            api.expect_reposition()
+                .times(1)
+                .returning(move |_| writes.lock().unwrap().push(id));
+            let entity = world
+                .spawn((Window::new(Box::new(api)), Position(target)))
+                .id();
+            if revealing {
+                world.entity_mut(entity).insert(NativeReveal);
+                returning = Some(entity);
+            }
+        }
+        let commit = world.register_system(commit_window_position);
+        world.run_system(commit).unwrap();
+        assert_eq!(*writes.lock().unwrap(), vec![0, 1]);
+        assert!(world.get::<NativeReveal>(returning.unwrap()).is_none());
+    }
 
     #[test]
     fn strip_motion_ignores_native_echoes_but_accepts_manual_geometry_at_rest() {

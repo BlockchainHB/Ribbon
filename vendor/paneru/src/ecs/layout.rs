@@ -1907,6 +1907,7 @@ fn position_layout_windows(
     config: Res<Config>,
     mut commands: Commands,
 ) {
+    let _measurement = crate::performance::measure(crate::performance::Metric::Layout);
     let parking_displays = collect_parking_displays(&displays, &config);
     let connected_bounds: Vec<_> = parking_displays.iter().map(|d| d.bounds).collect();
     let presentation = presentation_context(

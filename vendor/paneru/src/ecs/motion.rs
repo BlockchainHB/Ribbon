@@ -1,5 +1,40 @@
 //! Bounded, retargetable native geometry motion. Layout still supplies every target.
+use super::layout::LayoutStrip;
+use crate::manager::Display;
+use bevy::ecs::{
+    entity::Entity,
+    hierarchy::ChildOf,
+    system::{Query, SystemParam},
+};
 use bevy::math::{DVec2, IVec2};
+
+/// Resolve the owner from the canonical strip membership, without another cache.
+#[derive(SystemParam)]
+pub(super) struct MotionCadence<'w, 's> {
+    strips: Query<'w, 's, (&'static LayoutStrip, &'static ChildOf)>,
+    displays: Query<'w, 's, &'static Display>,
+}
+
+impl MotionCadence<'_, '_> {
+    pub fn interval_for(&self, entity: Entity) -> f64 {
+        if crate::performance::comparison_baseline() {
+            return 0.0;
+        }
+        let parent = self
+            .strips
+            .get(entity)
+            .ok()
+            .map(|(_, parent)| parent)
+            .or_else(|| {
+                self.strips
+                    .iter()
+                    .find_map(|(strip, parent)| strip.contains(entity).then_some(parent))
+            });
+        parent
+            .and_then(|parent| self.displays.get(parent.parent()).ok())
+            .map_or(1.0 / 120.0, Display::animation_interval)
+    }
+}
 
 #[derive(Default)]
 pub(super) struct Motion {
@@ -11,13 +46,21 @@ pub(super) struct Motion {
     output: IVec2,
     elapsed: f64,
     duration: f64,
+    since_output: f64,
 }
 
 impl Motion {
     /// Retain fractional points between AX commits. A Hermite segment ends at
     /// zero velocity in bounded time instead of rounding an exponential tail.
     /// Retargeting carries velocity, limited per axis to prevent overshoot.
-    pub fn step(&mut self, frame: IVec2, target: IVec2, rate: f64, delta: f64) -> (IVec2, bool) {
+    pub fn step(
+        &mut self,
+        frame: IVec2,
+        target: IVec2,
+        rate: f64,
+        delta: f64,
+        interval: f64,
+    ) -> (IVec2, bool) {
         if rate >= 10_000.0 || !rate.is_finite() || rate <= 0.0 {
             return (target, true);
         }
@@ -26,7 +69,14 @@ impl Motion {
             self.current = frame.as_dvec2();
             self.velocity = DVec2::ZERO;
         }
-        if fresh || target != self.target {
+        let retargeted = fresh || target != self.target;
+        if !fresh && retargeted {
+            // The curve may be ahead of the last sampled native frame. New
+            // intent must start at what was actually presented, especially on
+            // a reversal, rather than jumping to an uncommitted intermediate.
+            self.current = frame.as_dvec2();
+        }
+        if retargeted {
             self.start = self.current;
             self.target = target;
             self.elapsed = 0.0;
@@ -43,8 +93,18 @@ impl Motion {
             self.tangent = self.velocity * self.duration;
         }
         // Do not charge an idle event-loop sleep to a newly started transition.
-        let step = delta.clamp(0.0, if fresh { 1.0 / 120.0 } else { 1.0 / 30.0 });
+        // Once running, consume actual elapsed time. A slow AX app must not
+        // stretch a 230 ms transition into a long tail after a stalled frame.
+        let step = delta.clamp(
+            0.0,
+            if retargeted {
+                1.0 / 120.0
+            } else {
+                self.duration
+            },
+        );
         self.elapsed += step;
+        self.since_output += step;
         let t = (self.elapsed / self.duration).min(1.0);
         let distance = self.target.as_dvec2() - self.start;
         let tangent = self.tangent;
@@ -54,7 +114,17 @@ impl Motion {
         self.velocity = (distance * (6.0 * t - 6.0 * t * t)
             + tangent * (3.0 * t * t - 4.0 * t + 1.0))
             / self.duration;
-        self.output = self.current.round().as_ivec2();
+        // AX notifications may wake the engine much faster than a display.
+        // Advance the curve every time, but coalesce intermediate native targets.
+        // New intent and the exact endpoint always bypass this sampling limit.
+        if retargeted || t >= 1.0 || self.since_output + f64::EPSILON >= interval {
+            self.output = self.current.round().as_ivec2();
+            self.since_output = if retargeted || interval <= 0.0 {
+                0.0
+            } else {
+                self.since_output % interval
+            };
+        }
         (self.output, t >= 1.0)
     }
 }
@@ -64,6 +134,67 @@ mod tests {
     use super::*;
 
     #[test]
+    fn reversal_between_samples_starts_at_the_last_presented_frame() {
+        let mut motion = Motion::default();
+        let mut frame = motion
+            .step(IVec2::ZERO, IVec2::splat(2000), 14.0, 0.008, 1.0 / 60.0)
+            .0;
+        for _ in 0..10 {
+            frame = motion
+                .step(frame, IVec2::splat(2000), 14.0, 0.001, 1.0 / 60.0)
+                .0;
+        }
+        assert!(motion.current.x > f64::from(frame.x) + 20.0);
+        let target = IVec2::splat(-200);
+        for _ in 0..250 {
+            let next = motion.step(frame, target, 14.0, 0.001, 1.0 / 60.0).0;
+            assert!(next.x <= frame.x && next.x >= target.x);
+            frame = next;
+        }
+        assert_eq!(frame, target);
+    }
+
+    #[test]
+    fn notification_storm_is_sampled_at_the_owner_cadence_without_extending_duration() {
+        for (hz, limit) in [(60.0, 16), (120.0, 30)] {
+            let mut motion = Motion::default();
+            let mut frame = IVec2::ZERO;
+            let target = IVec2::splat(2400);
+            let mut writes = 0;
+            let mut finished_at = None;
+            for tick in 0..1000 {
+                let (next, done) = motion.step(frame, target, 14.0, 0.001, 1.0 / hz);
+                writes += usize::from(next != frame);
+                frame = next;
+                if done {
+                    finished_at = Some(tick);
+                    break;
+                }
+            }
+            assert!(finished_at.unwrap() < 235);
+            assert!(writes <= limit);
+            assert_eq!(frame, target);
+        }
+    }
+
+    #[test]
+    fn new_intent_and_endpoint_bypass_sampling_and_stalls_do_not_stretch_motion() {
+        let mut motion = Motion::default();
+        let first = motion
+            .step(IVec2::ZERO, IVec2::splat(2000), 14.0, 0.001, 0.1)
+            .0;
+        assert!(first.x > 0);
+        let held = motion.step(first, IVec2::splat(2000), 14.0, 0.001, 0.1).0;
+        assert_eq!(held, first);
+        let retargeted = motion.step(held, IVec2::splat(4000), 14.0, 0.008, 0.1).0;
+        assert!(retargeted.x > held.x);
+        assert_eq!(
+            motion.step(retargeted, IVec2::splat(4000), 14.0, 0.5, 0.1),
+            (IVec2::splat(4000), true)
+        );
+    }
+
+    #[test]
     fn settles_exactly_without_overshoot_at_different_refresh_rates() {
         for (hz, frames) in [(30.0, 30), (60.0, 60), (120.0, 120)] {
             let mut motion = Motion::default();
@@ -71,7 +202,7 @@ mod tests {
             let mut frame = IVec2::ZERO;
             let mut done = false;
             for _ in 0..frames {
-                let (next, finished) = motion.step(frame, target, 14.0, 1.0 / hz);
+                let (next, finished) = motion.step(frame, target, 14.0, 1.0 / hz, 1.0 / hz);
                 assert!(next.x >= frame.x && next.x <= target.x);
                 assert!(next.y <= frame.y && next.y >= target.y);
                 frame = next;
@@ -91,12 +222,14 @@ mod tests {
         let mut motion = Motion::default();
         let mut frame = IVec2::ZERO;
         for _ in 0..6 {
-            frame = motion.step(frame, IVec2::splat(1000), 14.0, 1.0 / 120.0).0;
+            frame = motion
+                .step(frame, IVec2::splat(1000), 14.0, 1.0 / 120.0, 1.0 / 120.0)
+                .0;
         }
         let interrupted = frame;
         let target = IVec2::splat(-200);
         for _ in 0..40 {
-            let next = motion.step(frame, target, 14.0, 1.0 / 120.0).0;
+            let next = motion.step(frame, target, 14.0, 1.0 / 120.0, 1.0 / 120.0).0;
             assert!(next.x <= frame.x && next.x >= target.x);
             assert!((next.x - frame.x).abs() < 100);
             frame = next;
@@ -108,16 +241,20 @@ mod tests {
     #[test]
     fn subpixel_travel_finishes_and_idle_wakeup_does_not_jump() {
         let mut motion = Motion::default();
-        let first = motion.step(IVec2::ZERO, IVec2::splat(1000), 14.0, 2.0).0;
+        let first = motion
+            .step(IVec2::ZERO, IVec2::splat(1000), 14.0, 2.0, 1.0 / 60.0)
+            .0;
         assert!(first.x > 0 && first.x < 100);
         let mut tiny = Motion::default();
         let mut frame = IVec2::ZERO;
         for _ in 0..40 {
-            frame = tiny.step(frame, IVec2::ONE, 8.0, 1.0 / 120.0).0;
+            frame = tiny
+                .step(frame, IVec2::ONE, 8.0, 1.0 / 120.0, 1.0 / 120.0)
+                .0;
         }
         assert_eq!(frame, IVec2::ONE);
         assert_eq!(
-            Motion::default().step(frame, IVec2::splat(1000), 1_000_000.0, 0.001),
+            Motion::default().step(frame, IVec2::splat(1000), 1_000_000.0, 0.001, 1.0 / 60.0),
             (IVec2::splat(1000), true)
         );
     }
