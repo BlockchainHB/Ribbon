@@ -4,8 +4,8 @@
 
 <h1 align="center">Ribbon</h1>
 
-<p align="center">Your windows, side by side.</p>
-<p align="center">A native scrolling window manager for your Mac.</p>
+<p align="center">Your agents, right beside your work.</p>
+<p align="center">A scrolling window manager for macOS.</p>
 
 <p align="center">
   <a href="https://github.com/BlockchainHB/Ribbon/releases/download/v0.2.0-beta.1/Ribbon-macOS-arm64.zip">Download for Mac</a>
@@ -15,15 +15,16 @@
   <a href="https://github.com/BlockchainHB/Ribbon/releases">Release notes</a>
 </p>
 
-<img src=".github/assets/workspace.svg" width="1152" alt="Layout illustration: notes, a browser, and messages arranged side by side." />
+<img src=".github/assets/workspace.svg" width="1152" alt="Illustration of an agent, an IDE, and a browser preview arranged in Ribbon’s scrolling workspace." />
 
-Ribbon keeps your windows in a horizontal strip. Move through them with the keyboard, choose the widths that suit your work, and keep two apps together when they belong together.
+Keep Codex beside your IDE, Claude beside your design tool, and the rest of your work nearby. Ribbon arranges normal app windows in a horizontal strip that extends beyond your screen. Choose useful widths, move between windows with the keyboard, and pair neighbors that belong together.
 
-- **Pair your apps.** Keep notes beside a browser. Move the pair together, or use a ⅓–⅔ arrangement without linking the windows.
-- **See and arrange.** Open an overview of your windows. Drag an icon to reorder, or click to focus a hidden tile.
-- **Use every display.** Keep an independent strip on each screen and move columns between displays.
+- **Agent + IDE.** Read the plan beside the code. Pair neighboring windows to move them together, or use a ⅓–⅔ arrangement without linking them.
+- **Multiple agent windows.** Find Codex, Claude, or a terminal in the overview. Click to focus a hidden tile, or drag an icon to reorder.
+- **Agent + design tool.** Keep the conversation beside the canvas while you work through an idea.
+- **Everyday work.** Notes beside a browser, mail beside a calendar, with an independent strip on each display.
 
-Native sidebar settings, customizable shortcuts, vertical stacks, and a menu bar control keep everything close at hand. Normal app windows join automatically; exclusions let you leave apps alone.
+Ribbon arranges windows; it does not run agents or connect to their sessions. Normal app windows join automatically, and exclusions let you leave apps alone. Keyboard shortcuts, vertical stacks, and a menu bar control are included.
 
 ## Get started
 
@@ -86,4 +87,4 @@ SwiftUI and AppKit own configuration and engine lifecycle. The Rust engine owns 
 
 Ribbon's engine builds on [Paneru](https://github.com/karinushka/paneru) by Karinushka. Its MIT license and upstream notices are preserved, and dependency notices ship with the app.
 
-[MIT license](LICENSE). Apple application icons in website illustrations belong to Apple.
+[MIT license](LICENSE). Application names and icons in website illustrations belong to their respective owners and identify example windows, not integrations or endorsements.

@@ -1,8 +1,10 @@
 # Ribbon website
 
-Static Astro implementation of the approved Paper **Medium headings** variant. The download area and footer stay white. Window scenes are layout illustrations, not an embedded window manager.
+Static Astro implementation of the approved Paper **Agent-first / Medium headings** design. The download area and footer stay white. Window scenes are editable illustrations, not an embedded window manager or agent integration.
 
-Design source: [Paper, page 2](https://app.paper.design/file/01M5GQFBZ419QN9EYEE6N9TDS9/p-2-0), desktop `L1-0` and mobile `QV-0`. Assets use Ribbon's approved Cobalt icon and the Paper illustrations.
+Design source: [Paper, page 2](https://app.paper.design/file/01M5GQFBZ419QN9EYEE6N9TDS9/p-2-0), artboards **07 · Desktop / Agent-first** and **08 · Mobile / Agent-first**. The earlier artboards are preserved. Assets use Ribbon's approved Cobalt icon and locally extracted example-app icons.
+
+The page leads with agent + IDE, multiple agent windows, and agent + design tool. Everyday work and independent displays follow. The README keeps installation, shortcuts, and beta limitations explicit. Research and copy decisions are recorded in [the copywriting brief](../docs/WEBSITE_COPY.md).
 
 ## Local development
 
@@ -39,6 +41,6 @@ Download, Source, and Release notes default to the public GitHub repository and 
 
 ## Structure
 
-`src/pages/index.astro` owns section order; `src/components/` owns the presentation sections; `src/styles/site.css` owns responsive styling. `src/lib/release.ts` is the single source for release URLs. Native disclosures handle FAQ interactions. Small scripts handle the mobile menu and copy-link action.
+`src/pages/index.astro` owns section order; `src/components/` owns the presentation sections. `src/styles/site.css` owns page styling and `src/styles/scenes.css` owns the illustrative window scenes, including their mobile variants. `src/lib/release.ts` is the single source for release URLs. Native disclosures handle FAQ interactions. Small scripts handle the mobile menu and copy-link action.
 
 See `FRAMEWORK.md` for the researched framework decision and `VERIFICATION.md` for checks and limits.

@@ -1,30 +1,13 @@
 ---
-import WindowChrome from './WindowChrome.astro';
-interface Props { paired?: boolean; }
-const { paired = false } = Astro.props;
+import AgentWindow from './AgentWindow.astro';
+import EditorWindow from './EditorWindow.astro';
+import PreviewWindow from './PreviewWindow.astro';
+import DesignWindow from './DesignWindow.astro';
+interface Props { variant?: 'hero' | 'coding' | 'design'; }
+const { variant = 'hero' } = Astro.props;
 ---
-<div class:list={['workspace-scene', paired ? 'pair-scene' : 'hero-stage']} aria-hidden="true">
-  <div class="example-window notes-window">
-    <WindowChrome title="Notes" />
-    <div class="notes-content">
-      {!paired && <p class="notes-context">Saturday / A little time away</p>}
-      <p class="example-title notes-title">Weekend plans</p>
-      <p class="notes-list desktop-example">Find a place by the water<br />Book a table for two<br />Leave the afternoon open</p>
-      <p class="notes-list mobile-example">By the water<br />Table for two<br />Afternoon off</p>
-      <hr /><p class="notes-end">{paired ? 'A little time away.' : <>A few good things.<br />Nothing too planned.</>}</p>
-    </div>
-  </div>
-  <div class="example-window browser-window">
-    <WindowChrome title="Browser" />
-    <div class="browser-content">
-      <div class="example-site-nav"><span>NORTH / <span class="desktop-example">A journal of small escapes</span><span class="mobile-example">Small escapes</span></span>{!paired && <span class="example-site-links">Places&nbsp;&nbsp; Stories</span>}</div>
-      <p class="example-title browser-title">A weekend<br />by the water.</p>
-      <img class="sea-illustration" src="/assets/sea.svg" width="450" height="112" alt="" />
-      {!paired && <p class="browser-caption">A slower plan for Saturday.</p>}
-    </div>
-  </div>
-  {!paired && <div class="example-window messages-window">
-    <WindowChrome title="Messages" />
-    <div class="messages-content"><div class="message-person"><span class="avatar">M</span><strong>Maya</strong></div><p class="message-received">The place looks great.<br />Shall we go?</p><p class="message-sent">Saturday sounds good.</p><p class="delivered">Delivered</p></div>
-  </div>}
+<div class:list={['workspace-scene', variant === 'hero' ? 'hero-stage' : 'pair-scene', { 'design-scene': variant === 'design' }]} aria-hidden="true">
+  <AgentWindow design={variant === 'design'} />
+  {variant === 'design' ? <DesignWindow /> : <EditorWindow />}
+  {variant === 'hero' && <><PreviewWindow /><AgentWindow continuation /></>}
 </div>
