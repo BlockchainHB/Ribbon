@@ -1,71 +1,89 @@
-# Ribbon
+<p align="center">
+  <img src=".github/assets/icon.png" width="96" height="96" alt="Ribbon" />
+</p>
 
-A native scrolling-window beta for Apple silicon Macs. SwiftUI/AppKit controls a
-pinned Paneru Rust engine. The app starts paused and defaults to managing only
-its disposable demo windows.
+<h1 align="center">Ribbon</h1>
 
-## Build and install
+<p align="center">Your windows, side by side.</p>
+<p align="center">A native scrolling window manager for your Mac.</p>
 
-Requires Xcode command-line tools, Python 3 and Rust 1.95.0 (pinned in
-rust-toolchain.toml). Rust's default toolchain is not changed.
+<p align="center">
+  <a href="https://github.com/BlockchainHB/Ribbon/releases/download/v0.2.0-beta.1/Ribbon-macOS-arm64.zip">Download for Mac</a>
+  &nbsp;·&nbsp;
+  <a href="docs/GETTING_STARTED.md">Getting started</a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/BlockchainHB/Ribbon/releases">Release notes</a>
+</p>
 
-    scripts/build-app.sh
-    scripts/install.sh
+<img src=".github/assets/workspace.svg" width="1152" alt="Layout illustration: notes, a browser, and messages arranged side by side." />
 
-For faster engine iteration, scripts/build-app.sh --debug-engine creates a
-separate debug bundle and archive; installation continues to use the release.
+Ribbon keeps your windows in a horizontal strip. Move through them with the keyboard, choose the widths that suit your work, and keep two apps together when they belong together.
 
-The deliverable is build/Ribbon-beta.zip; installation uses
-~/Applications/Ribbon.app. The local build is ad-hoc signed, verified and not
-notarized. The physical signed app and Swift build products use Library/Caches
-because Documents/iCloud rewrites bundle metadata after signing. The exact
-staged app path is recorded in build/artifacts.json.
+- **Pair your apps.** Keep notes beside a browser. Move the pair together, or use a ⅓–⅔ arrangement without linking the windows.
+- **See and arrange.** Open an overview of your windows. Drag an icon to reorder, or click to focus a hidden tile.
+- **Use every display.** Keep an independent strip on each screen and move columns between displays.
 
-Launch Ribbon, enable it in macOS Accessibility settings, and check access in
-the app. Demo mode manages only Ribbon Demo. Selected-app mode manages exactly
-the applications explicitly selected. Scope changes require pausing first.
+Native sidebar settings, customizable shortcuts, vertical stacks, and a menu bar control keep everything close at hand. Normal app windows join automatically; exclusions let you leave apps alone.
 
-Control–Option + arrows navigates; add Shift to reorder. R cycles widths, F
-toggles full width, C centers, ] stacks, Shift–] unstacks, and Q stops the engine.
-Control–Option + horizontal scroll slides the strip.
-Each display has an independent strip. Control–Option–N transfers the focused
-window and preserves its width proportion on the destination screen.
+## Get started
 
-Window spacing defaults to 12 pt between tiles and at screen edges. The setting
-applies horizontally and vertically; scrolling and resizing keep a shared strip
-geometry. Reordering snaps to the new order instead of crossing other tiles.
+Requires **macOS 15 or later** and **Apple silicon**. The first public release is a beta.
 
-## Verification
+1. [Download Ribbon](https://github.com/BlockchainHB/Ribbon/releases/download/v0.2.0-beta.1/Ribbon-macOS-arm64.zip), unzip it, and move **Ribbon.app** to **Applications**.
+2. Allow **Ribbon** in **System Settings → Privacy & Security → Accessibility**.
+3. Open **Ribbon → Settings → General** and turn on **Window management**.
 
-Results for the installed release: [docs/verification.md](docs/verification.md).
+Ribbon starts paused. Pause it again from the menu bar to restore your window positions. No account or subscription is required.
 
-    scripts/verify.sh
-    python3 scripts/watchdog-check.py "$HOME/Applications/Ribbon.app"
-    python3 scripts/desktop-qa.py "$HOME/Applications/Ribbon.app" "$PWD/build/qa/fresh-run"
+## At your fingertips
 
-The isolated desktop suite runs by launching the installed app with
---qa-output /absolute/path/to/report.json. It requires Accessibility access,
-creates disposable fixture and excluded-sentinel windows, checks navigation,
-widths, stacking and original-frame restoration, then closes those test apps.
-Use a fresh output directory and quit any existing Ribbon instance first.
-Its focus samples include fixture-reporting delay and are not input-to-photon
-benchmarks.
-Add --qa-dual for the eight-window physical two-monitor suite. The behavior
-contract and remaining hardware matrix are in [docs/dual-monitor.md](docs/dual-monitor.md).
+| Action | Shortcut |
+| --- | --- |
+| Focus a neighboring column | `⌃ ⌥ ← / →` |
+| Reorder a column | `⌃ ⌥ ⇧ ← / →` |
+| Arrange windows | `⌃ ⌥ Tab` |
+| Cycle widths | `⌃ ⌥ R` |
+| Toggle full width | `⌃ ⌥ F` |
+| Stack / unstack | `⌃ ⌥ ]` / `⌃ ⌥ ⇧ ]` |
+| Move to the next display | `⌃ ⌥ N` |
+| Pause and restore | `⌃ ⌥ Q` |
 
-Settings and a private recovery journal live in
-~/Library/Application Support/Ribbon. Original frames are restored when
-possible; newly created windows without a pre-session record are fitted back
-onto a visible display. Missing windows are ignored, failed recovery remains
-available, and no document titles or window contents are persisted.
+All assignments can be changed in **Settings → Shortcuts**. Pairing is available from the overview's context menu; its shortcuts are yours to assign. [Read the guide →](docs/GETTING_STARTED.md)
 
-## Source ownership
+## Early release notes
 
-Engine changes and provenance: [vendor/paneru/RIBBON.md](vendor/paneru/RIBBON.md).
-Scope and acceptance: [docs/acceptance.md](docs/acceptance.md).
-Engine decision: [docs/engine-decision.md](docs/engine-decision.md).
-The research report is in research/window-manager-study.html.
+Some apps enforce minimum window sizes. macOS can retain a small edge of an offscreen window. Pair membership lasts for the current session. Multi-display pairing, mixed-scale transfers, sleep/wake, and display reconnects need more physical testing. Intel builds and automatic updates are not included.
 
-Public distribution, auto-updates, startup at login, pinning, a complete shortcut
-recorder and full ChainYourMac parity are outside this first beta. Physical
-multi-display, trackpad feel and sleep/wake results must be recorded separately.
+The app keeps settings and recovery data locally. It does not persist document titles or window contents, and uses no accounts or telemetry. Avoid running another window manager alongside Ribbon.
+
+Found something? [Open an issue](https://github.com/BlockchainHB/Ribbon/issues) with your macOS version, display arrangement, and steps to reproduce. Keep private document contents out of screenshots.
+
+<details>
+<summary><strong>Build from source</strong></summary>
+
+Requires Apple silicon, Xcode 26 or later with Icon Composer support, Python 3, and Rust 1.95.0. Dependencies and the engine source are pinned.
+
+```sh
+git clone https://github.com/BlockchainHB/Ribbon.git
+cd Ribbon
+scripts/build-app.sh
+scripts/install.sh
+```
+
+Local builds use an installed Developer ID identity when available and otherwise fall back to ad-hoc signing. Only the published release goes through notarization.
+
+```sh
+scripts/verify.sh
+```
+
+SwiftUI and AppKit own configuration and engine lifecycle. The Rust engine owns window layout, focus, and gestures. It is based on a checked-in Paneru snapshot; local changes are documented in [vendor/paneru/RIBBON.md](vendor/paneru/RIBBON.md).
+
+[Development notes](docs/DEVELOPMENT.md) · [Release process](docs/RELEASING.md) · [Website](website/README.md)
+
+</details>
+
+## Built on good work
+
+Ribbon's engine builds on [Paneru](https://github.com/karinushka/paneru) by Karinushka. Its MIT license and upstream notices are preserved, and dependency notices ship with the app.
+
+[MIT license](LICENSE). Apple application icons in website illustrations belong to Apple.
