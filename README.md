@@ -15,7 +15,7 @@
   <a href="https://github.com/BlockchainHB/Ribbon/releases">Release notes</a>
 </p>
 
-<img src=".github/assets/workspace.svg" width="1152" alt="Illustration of an agent, an IDE, and a browser preview arranged in Ribbon’s scrolling workspace." />
+<img src=".github/assets/workspace.svg?v=agent-first" width="1152" alt="Illustration of an agent, an IDE, and a browser preview arranged in Ribbon’s scrolling workspace." />
 
 Keep Codex beside your IDE, Claude beside your design tool, and the rest of your work nearby. Ribbon arranges normal app windows in a horizontal strip that extends beyond your screen. Choose useful widths, move between windows with the keyboard, and pair neighbors that belong together.
 
