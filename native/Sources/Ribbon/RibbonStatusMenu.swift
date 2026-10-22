@@ -228,7 +228,10 @@ final class RibbonStatusMenu: NSObject, NSMenuDelegate {
     let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
     item.target = self
     item.isEnabled = true
-    if #available(macOS 27.0, *) { item.preferredImageVisibility = .visible }
+    #if compiler(>=6.4)
+      // This preference is declared by the macOS 27 SDK, not older SDKs.
+      if #available(macOS 27.0, *) { item.preferredImageVisibility = .visible }
+    #endif
     return item
   }
 
