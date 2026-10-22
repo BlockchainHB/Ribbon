@@ -1,0 +1,9 @@
+---
+const questions = [
+  ['What does Ribbon need?', 'An Apple silicon Mac running macOS 15 or later, and Accessibility access so Ribbon can focus and arrange your windows.'],
+  ['Which apps does it manage?', 'Normal app windows are included automatically. Excluded Apps in Settings lets you leave particular apps alone. Ribbon and System Settings are protected.'],
+  ['Can I pause it?', 'Yes. Pause window management from the menu bar or General settings.'],
+  ['Can I use two displays?', 'Each display has its own scrolling workspace. Multi-display pairing is still being tested in the beta.'],
+];
+---
+<section id="questions" class="questions-section"><div class="container questions-layout"><h2>Questions?</h2><div class="question-list">{questions.map(([question, answer]) => <details class="question"><summary>{question}<span class="plus" aria-hidden="true"></span></summary><div class="answer"><p>{answer}</p></div></details>)}</div></div></section>

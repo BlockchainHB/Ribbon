@@ -1,0 +1,44 @@
+<svg width="1080" height="406" viewBox="0 0 1080 406" xmlns="http://www.w3.org/2000/svg">
+            <path d="M337 324H425L437 382H325Z" fill="#D7DADF" />
+            <rect x="285" y="380" width="192" height="8" rx="4" fill="#CDD1D8" />
+            <rect x="42" y="14" width="678" height="333" rx="20" fill="#DADDE2" />
+            <rect x="47" y="19" width="668" height="309" rx="16" fill="#20242C" />
+            <rect x="57" y="29" width="648" height="289" rx="8" fill="#E9EFFC" />
+            <rect x="68" y="42" width="167" height="262" rx="6" fill="#FFFFFF" />
+            <rect x="245" y="42" width="271" height="262" rx="6" fill="#FFFFFF" />
+            <rect x="526" y="42" width="168" height="262" rx="6" fill="#FFFFFF" />
+            <path d="M68 70H235M245 70H516M526 70H694" fill="none" stroke="#E2E5EB" />
+            <text x="82" y="61" font-family="Arial" font-size="12" fill="#5D6470">
+              Notes
+            </text>
+            <text x="259" y="61" font-family="Arial" font-size="12" fill="#5D6470">
+              Browser
+            </text>
+            <text x="540" y="61" font-family="Arial" font-size="12" fill="#5D6470">
+              Messages
+            </text>
+            <rect x="82" y="88" width="97" height="9" rx="3" fill="#20242C" />
+            <path d="M82 119H211M82 135H200M82 151H209M82 181H178" fill="none" stroke="#CDD1D8" stroke-width="5" stroke-linecap="round" />
+            <rect x="260" y="88" width="240" height="103" rx="4" fill="#CCD9F5" />
+            <path d="M260 158C337 105 388 192 500 126V191H260Z" fill="#2856ED" />
+            <path d="M260 214H475M260 230H486M260 246H430" fill="none" stroke="#CDD1D8" stroke-width="5" stroke-linecap="round" />
+            <rect x="540" y="90" width="126" height="35" rx="10" fill="#EEF0F4" />
+            <rect x="554" y="137" width="126" height="35" rx="10" fill="#2856ED" />
+            <rect x="540" y="184" width="100" height="35" rx="10" fill="#EEF0F4" />
+            <rect x="755" y="173" width="300" height="192" rx="14" fill="#353A43" />
+            <rect x="762" y="181" width="286" height="175" rx="8" fill="#E9EFFC" />
+            <rect x="770" y="190" width="140" height="158" rx="5" fill="#20242C" />
+            <rect x="918" y="190" width="122" height="158" rx="5" fill="#FFFFFF" />
+            <text x="781" y="207" font-family="Arial" font-size="10" fill="#FFFFFF">
+              Terminal
+            </text>
+            <text x="929" y="207" font-family="Arial" font-size="10" fill="#5D6470">
+              Calendar
+            </text>
+            <path d="M781 225H860M781 236H889M781 247H842M781 269H879M781 280H850" fill="none" stroke="#A9B7D2" stroke-width="3" stroke-linecap="round" />
+            <rect x="928" y="221" width="100" height="22" rx="4" fill="#EDF2FF" />
+            <rect x="928" y="251" width="100" height="22" rx="4" fill="#EDF2FF" />
+            <rect x="928" y="281" width="72" height="22" rx="4" fill="#EDF2FF" />
+            <path d="M739 365H1070V370C1070 379 1058 384 1049 384H760C751 384 739 379 739 370Z" fill="#D7DADF" />
+            <rect x="868" y="365" width="71" height="5" rx="2.5" fill="#B8BEC8" />
+          </svg>
