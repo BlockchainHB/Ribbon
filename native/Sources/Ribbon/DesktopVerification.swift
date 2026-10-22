@@ -49,7 +49,7 @@ enum DesktopVerification {
     }
   }
 
-  static func run(_ controller: SessionController) async {
+  static func run(_ controller: SessionController, statusMenu: RibbonStatusMenu?) async {
     guard !started, let index = CommandLine.arguments.firstIndex(of: "--qa-output"),
       CommandLine.arguments.indices.contains(index + 1)
     else { return }
@@ -74,6 +74,12 @@ enum DesktopVerification {
         try write(report, to: output)
         return
       }
+      try await eventually("Sidebar settings window appeared") {
+        NSApp.windows.contains { window in
+          window.canBecomeMain && window.contentLayoutRect.width >= 740
+        }
+      }
+      report.checks.append(Check(name: "native sidebar settings window", passed: true))
       for app in NSWorkspace.shared.runningApplications
       where [RibbonSettings.fixtureBundleID, "dev.ribbon.sentinel"].contains(
         app.bundleIdentifier ?? "")
@@ -81,12 +87,14 @@ enum DesktopVerification {
         throw VerificationError.failed(
           "An existing demo test app is open. Close it before this isolated test run.")
       }
+      try await verifyStatusItem(statusMenu, report: &report)
       let dualDisplays = CommandLine.arguments.contains("--qa-dual")
       if dualDisplays && NSScreen.screens.count != 2 {
         throw VerificationError.failed("Dual-display QA requires exactly two connected displays")
       }
       let expectedWindows = dualDisplays ? 8 : 4
       controller.settings = RibbonSettings()
+      controller.settings.scope = .demo
       try await controller.openDemo(report: fixture, dualDisplays: dualDisplays)
       owned += NSRunningApplication.runningApplications(
         withBundleIdentifier: RibbonSettings.fixtureBundleID)
@@ -103,7 +111,7 @@ enum DesktopVerification {
       let excluded = try await settledFrames(sentinel)
       report.frames["original"] = original
       report.frames["excluded"] = excluded
-      await controller.start()
+      try await clickSessionSwitch(controller, running: true)
       try require(controller.phase == .running, "Engine became ready")
       try await eventually("Only fixture windows are managed") {
         let state = try JSONDecoder().decode(EngineState.self, from: await controller.query())
@@ -111,9 +119,24 @@ enum DesktopVerification {
           && state.windows.allSatisfy { $0.bundleID == RibbonSettings.fixtureBundleID }
       }
       report.checks.append(Check(name: "start and exact application scope", passed: true))
-      if dualDisplays {
+      if CommandLine.arguments.contains("--qa-pairing") {
+        try await verifyPairing(controller, fixture: fixture, report: &report)
+      } else if CommandLine.arguments.contains("--qa-motion") {
+        try await verifyMotion(controller, fixture: fixture, report: &report)
+        try await verifyOverview(controller, fixture: fixture, report: &report)
+      } else if CommandLine.arguments.contains("--qa-overview") {
+        try await verifyOverview(controller, fixture: fixture, report: &report)
+      } else if CommandLine.arguments.contains("--qa-width-policy") {
+        try await verifyWidthPolicy(controller, fixture: fixture, report: &report)
+      } else if dualDisplays {
         try await verifyDual(controller, fixture: fixture, original: original, report: &report)
+        if CommandLine.arguments.contains("--qa-raycast") {
+          try await verifyRaycastOpening(
+            controller, fixture: fixture, original: original, owned: &owned, report: &report)
+        }
       } else {
+        try await verifyApplicationOpening(
+          controller, fixture: fixture, owned: &owned, report: &report)
         try await verifyMotion(controller, fixture: fixture, report: &report)
         await controller.send(.first)
         try await eventually("First fixture receives focus") {
@@ -183,7 +206,9 @@ enum DesktopVerification {
         try frames(sentinel).elementsEqual(excluded, by: { $0.matches($1) }),
         "Excluded sentinel remained unchanged")
       report.checks.append(Check(name: "excluded application never moved", passed: true))
-      await controller.pause()
+      try await clickSessionSwitch(controller, running: false)
+      report.checks.append(
+        Check(name: "native switch pauses a running session with a recovery journal", passed: true))
       try require(
         controller.phase == .stopped && !controller.recoveryPending, "Pause completed recovery")
       try await eventually("Original frames restored") {
@@ -195,9 +220,9 @@ enum DesktopVerification {
       try require(
         try frames(sentinel).elementsEqual(excluded, by: { $0.matches($1) }),
         "Sentinel survives cleanup")
-      await controller.start()
+      try await clickSessionSwitch(controller, running: true)
       try require(controller.phase == .running, "Restart became ready")
-      await controller.pause()
+      try await clickSessionSwitch(controller, running: false)
       try require(!controller.recoveryPending, "Restart restored original frames")
       report.checks.append(Check(name: "start-pause-start lifecycle", passed: true))
       try require(

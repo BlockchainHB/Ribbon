@@ -384,10 +384,8 @@ impl Config {
         self.inner().options.clone()
     }
 
-    // Exponential ease-out decay rate (per second) consumed by the animation
-    // systems as `t = 1 - e^(-rate*dt)`. Higher values feel snappier; very large
-    // values collapse to an instant snap.
-    // Suggested range: 8..20 for a fluid feel. Unset = instant (no animation),
+    // Native motion duration is 3.2 / speed seconds, capped at 300ms.
+    // Higher remains faster; unset or very large values snap immediately.
     pub fn animation_speed(&self) -> f64 {
         self.options()
             .animation_speed
@@ -490,6 +488,14 @@ impl Config {
         self.options().sliver_height.unwrap_or(1.0).clamp(0.1, 1.0)
     }
 
+    pub fn compact_parking(&self) -> bool {
+        self.options().compact_parking.unwrap_or(false)
+    }
+
+    pub fn fill_available_width(&self) -> bool {
+        self.options().fill_available_width.unwrap_or(false)
+    }
+
     pub fn sliver_width(&self) -> i32 {
         i32::from(self.options().sliver_width.unwrap_or(5)).max(1)
     }
@@ -499,9 +505,13 @@ impl Config {
         let o = &config.options;
         let p = config.padding.as_ref();
         (
-            i32::from(p.and_then(|p| p.top).or(o.padding_top).unwrap_or(0)),
+            p.and_then(|p| p.top)
+                .or(o.padding_top.map(i32::from))
+                .unwrap_or(0),
             i32::from(p.and_then(|p| p.right).or(o.padding_right).unwrap_or(0)),
-            i32::from(p.and_then(|p| p.bottom).or(o.padding_bottom).unwrap_or(0)),
+            p.and_then(|p| p.bottom)
+                .or(o.padding_bottom.map(i32::from))
+                .unwrap_or(0),
             i32::from(p.and_then(|p| p.left).or(o.padding_left).unwrap_or(0)),
         )
     }
@@ -1236,6 +1246,10 @@ pub struct MainOptions {
     /// Width of off-screen window slivers in pixels.
     /// Default: 5 pixels.
     pub sliver_width: Option<u16>,
+    /// Compact off-viewport presentation without changing logical tile ownership.
+    pub compact_parking: Option<bool>,
+    /// Expand fitting strips to the usable display width; overflow keeps preferred widths.
+    pub fill_available_width: Option<bool>,
     /// Legacy top-level padding (deprecated; use `[padding]`).
     pub padding_top: Option<u16>,
     pub padding_bottom: Option<u16>,
@@ -1688,6 +1702,9 @@ fn resolve_keybinding_str(input: &str, virtual_keys: &[(String, u8)]) -> Result<
 }
 
 fn keycode_for_key_name(key: &str, virtual_keys: &[(String, u8)]) -> Option<u8> {
+    if let Some(code) = key.strip_prefix("keycode:") {
+        return code.parse::<u8>().ok().filter(|code| *code <= 126);
+    }
     virtual_keys
         .iter()
         .find(|(k, _)| k == key)
@@ -2827,4 +2844,14 @@ mod lua_setup_tests {
         let lua = Lua::new();
         assert!(config_from_lua(&lua, mlua::Value::Integer(3)).is_err());
     }
+}
+
+#[test]
+fn ribbon_physical_shortcuts_ignore_keyboard_layout_translation() {
+    let translated = vec![("a".to_owned(), 12)];
+    assert_eq!(keycode_for_key_name("keycode:0", &translated), Some(0));
+    assert_eq!(keycode_for_key_name("keycode:123", &translated), Some(123));
+    assert_eq!(keycode_for_key_name("a", &translated), Some(12));
+    assert_eq!(keycode_for_key_name("keycode:127", &translated), None);
+    assert_eq!(keycode_for_key_name("keycode:-1", &translated), None);
 }

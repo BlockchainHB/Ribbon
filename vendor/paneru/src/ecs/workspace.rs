@@ -316,6 +316,7 @@ fn workspace_change_handler(
             workspace_id: old_strip.id(),
             index: original_index,
         };
+        old_strip.unpair(fullscreen_window);
         old_strip.remove(fullscreen_window);
 
         let fullscreen_strip = LayoutStrip::fullscreen(workspace_id, fullscreen_window);
@@ -337,15 +338,21 @@ fn workspace_change_handler(
     }
 }
 
+type MigrationStrips<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static mut LayoutStrip,
+        Entity,
+        Has<NativeFullscreenMarker>,
+        Option<&'static ChildOf>,
+    ),
+>;
+
 #[instrument(level = Level::DEBUG, skip_all, fields(trigger))]
 fn detect_moved_windows(
     activated_workspace: Single<Entity, Added<ActiveWorkspaceMarker>>,
-    mut workspaces: Query<(
-        &mut LayoutStrip,
-        Entity,
-        Has<NativeFullscreenMarker>,
-        Option<&ChildOf>,
-    )>,
+    mut workspaces: MigrationStrips,
     apps: Query<&mut Application>,
     window_manager: Res<WindowManager>,
     reconcile_state: Option<Res<crate::ecs::display::DisplayReconcileState>>,
@@ -418,19 +425,15 @@ fn detect_moved_windows(
         return;
     }
 
+    let compact = ctx.config.compact_parking();
     let moved_set: bevy::ecs::entity::EntityHashSet = moved_windows
         .iter()
         .copied()
         .filter(|&entity| {
-            !workspaces
-                .iter()
-                .any(|(strip, _, fullscreen, _)| fullscreen && strip.contains(entity))
+            !ctx.windows.is_parked(entity)
+                && may_follow_native_space(entity, target_display, &workspaces, compact)
         })
         .collect();
-    if moved_set.is_empty() {
-        return;
-    }
-
     if is_batch_workspace_move(workspace_id, &moved_set, &workspaces)
         && let Some(display_entity) = target_display
     {
@@ -466,15 +469,24 @@ fn detect_moved_windows(
     }
 }
 
+// Parking can change a window's native Space without changing its tile owner.
+fn may_follow_native_space(
+    entity: Entity,
+    target_display: Option<Entity>,
+    workspaces: &MigrationStrips,
+    compact: bool,
+) -> bool {
+    !workspaces.iter().any(|(strip, _, fullscreen, child)| {
+        strip.contains(entity)
+            && (fullscreen
+                || compact && child.is_some_and(|child| Some(child.parent()) != target_display))
+    })
+}
+
 fn is_batch_workspace_move(
     workspace_id: WorkspaceId,
     moved_set: &bevy::ecs::entity::EntityHashSet,
-    workspaces: &Query<(
-        &mut LayoutStrip,
-        Entity,
-        Has<NativeFullscreenMarker>,
-        Option<&ChildOf>,
-    )>,
+    workspaces: &MigrationStrips,
 ) -> bool {
     workspaces.iter().any(|(strip, _, fullscreen, child)| {
         if fullscreen || strip.id() == workspace_id {

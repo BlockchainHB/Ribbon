@@ -168,6 +168,8 @@ pub struct WindowRec {
 /// One column of a workspace's layout strip.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ColumnSet {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pair_id: Option<u64>,
     pub kind: ColumnKind,
     /// Width as a fraction of the display, as the layout engine has it.
     pub width_ratio: f64,
@@ -181,6 +183,7 @@ impl ColumnSet {
     #[must_use]
     pub fn single(window: WindowRec, width_ratio: f64) -> Self {
         Self {
+            pair_id: None,
             kind: ColumnKind::Single,
             width_ratio,
             selected: 0,

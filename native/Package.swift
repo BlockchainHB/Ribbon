@@ -13,5 +13,6 @@ let package = Package(
     .executableTarget(name: "Ribbon", dependencies: ["RibbonCore"]),
     .executableTarget(name: "RibbonFixture", dependencies: ["RibbonCore"]),
     .testTarget(name: "RibbonCoreTests", dependencies: ["RibbonCore"]),
+    .testTarget(name: "RibbonUITests", dependencies: ["Ribbon", "RibbonCore"]),
   ]
 )

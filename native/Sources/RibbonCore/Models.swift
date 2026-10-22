@@ -3,7 +3,7 @@ import Foundation
 
 public enum EngineCommand: String, CaseIterable, Sendable {
   case first, left, right, up, down, width, fullWidth, center, stack, unstack, tabs, float,
-    nextDisplay
+    nextDisplay, sendDisplay, fit
 
   public var arguments: [String] {
     let operation: [String]
@@ -21,6 +21,8 @@ public enum EngineCommand: String, CaseIterable, Sendable {
     case .tabs: operation = ["tabbeddisplay"]
     case .float: operation = ["manage"]
     case .nextDisplay: operation = ["nextdisplay"]
+    case .sendDisplay: operation = ["nextdisplaysend"]
+    case .fit: operation = ["snap"]
     }
     return ["send-cmd", "window"] + operation
   }
@@ -44,11 +46,12 @@ public struct EngineState: Decodable, Sendable {
     public let windowID: Int32
     public let bundleID: String
     public let floating: Bool
+    public let visible: Bool?
     public let displayID: UInt32?
     enum CodingKeys: String, CodingKey {
       case windowID = "window_id"
       case bundleID = "bundle_id"
-      case floating
+      case floating, visible
       case displayID = "display_id"
     }
   }
@@ -100,19 +103,50 @@ public struct RecoveryJournal: Codable, Equatable, Sendable {
   public let sessionID: UUID
   public let windows: [SavedWindow]
   public let managedBundleIDs: Set<String>
+  public let scope: ManagementScope
+  public let excludedBundleIDs: Set<String>
 
-  public init(windows: [SavedWindow], managedBundleIDs: Set<String>? = nil) {
-    version = 1
+  public init(
+    windows: [SavedWindow], managedBundleIDs: Set<String>? = nil,
+    scope: ManagementScope = .selected, excludedBundleIDs: Set<String> = []
+  ) {
+    version = scope == .all ? 2 : 1
     sessionID = UUID()
     self.windows = windows
     self.managedBundleIDs = managedBundleIDs ?? Set(windows.map(\.bundleID))
+    self.scope = scope
+    self.excludedBundleIDs = excludedBundleIDs
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case version, sessionID, windows, managedBundleIDs, scope, excludedBundleIDs
+  }
+  public init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    version = try values.decode(Int.self, forKey: .version)
+    sessionID = try values.decode(UUID.self, forKey: .sessionID)
+    windows = try values.decode([SavedWindow].self, forKey: .windows)
+    managedBundleIDs = try values.decode(Set<String>.self, forKey: .managedBundleIDs)
+    scope = try values.decodeIfPresent(ManagementScope.self, forKey: .scope) ?? .selected
+    excludedBundleIDs =
+      try values.decodeIfPresent(Set<String>.self, forKey: .excludedBundleIDs) ?? []
+  }
+
+  public func recoveryBundleIDs(in running: Set<String>) -> Set<String> {
+    if scope != .all { return managedBundleIDs }
+    return running.filter {
+      RibbonSettings.validBundleID($0) && !RibbonSettings.protectedBundleIDs.contains($0)
+        && !excludedBundleIDs.contains($0)
+    }
   }
 
   public func validated() throws -> Self {
-    guard version == 1, windows.count <= 1000,
+    guard (version == 1 && scope != .all) || version == 2,
+      windows.count <= 1000,
       managedBundleIDs.allSatisfy(RibbonSettings.validBundleID),
-      managedBundleIDs.isDisjoint(with: [RibbonSettings.appBundleID, "com.apple.systempreferences"]
-      ),
+      excludedBundleIDs.allSatisfy(RibbonSettings.validBundleID),
+      managedBundleIDs.isDisjoint(with: RibbonSettings.protectedBundleIDs),
+      scope != .all || managedBundleIDs.isDisjoint(with: excludedBundleIDs),
       windows.allSatisfy({
         $0.pid > 1 && $0.windowID > 0 && $0.frame.isValid
           && RibbonSettings.validBundleID($0.bundleID) && $0.launchTime.isFinite

@@ -83,6 +83,8 @@ pub struct Paneru {
 /// a running daemon.
 #[derive(Clone, Debug, Default, Subcommand)]
 pub enum SubCmd {
+    /// Read the live column tree without changing windows.
+    OverviewState,
     /// Reports Accessibility trust without prompting or starting window management.
     CheckPermission,
     /// Validates a generated TOML file without starting window management.
@@ -214,6 +216,7 @@ fn main() -> Result<()> {
     maybe_warn_deprecated_options_for_service(&subcmd);
 
     match subcmd {
+        SubCmd::OverviewState => client::run(ClientCommand::Overview)?,
         SubCmd::CheckPermission => println!("{}", check_ax_privilege()),
         SubCmd::CheckConfig { path } => {
             config::Config::load(Some(&path))?;

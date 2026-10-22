@@ -455,7 +455,9 @@ pub(super) fn mission_control_trigger(
                         .all_windows()
                         .into_iter()
                         .filter_map(|entity| windows.get(entity).zip(Some(entity)))
-                        .filter(|(window, _)| !present_windows.contains(&window.id()));
+                        .filter(|(window, entity)| {
+                            !windows.is_parked(*entity) && !present_windows.contains(&window.id())
+                        });
                     for (window, entity) in moved_windows {
                         debug!(
                             "window {} {entity} moved, removing from workspace {}",

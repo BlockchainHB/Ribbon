@@ -1,9 +1,91 @@
 //! Keep parked columns out of neighboring physical displays.
 use crate::config::Config;
-use bevy::prelude::{Component, IRect, IVec2};
+use bevy::prelude::{Commands, Component, Entity, IRect, IVec2};
 
 #[derive(Component)]
 pub(super) struct AdjacentDisplayParked;
+
+/// Presentation only: native geometry must not migrate the logical tile.
+#[derive(Component)]
+pub(crate) struct CompactParked {
+    pub size_limit: IVec2,
+}
+
+pub(super) fn update_parking_state(
+    commands: &mut Commands,
+    entity: Entity,
+    size_limit: Option<IVec2>,
+    was_parked: bool,
+) {
+    if let Some(size_limit) = size_limit {
+        commands
+            .entity(entity)
+            .try_insert(CompactParked { size_limit });
+        if !was_parked {
+            commands
+                .entity(entity)
+                .try_insert(crate::ecs::VerifyWindowPosition::default());
+        }
+    } else {
+        commands.entity(entity).try_remove::<CompactParked>();
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct ParkingDisplay {
+    pub bounds: IRect,
+    pub viewport: IRect,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct ParkedGeometry {
+    pub frame: IRect,
+    pub size_limit: IVec2,
+}
+
+/// Keep only a one-point right edge in the desktop. Left-edge `AppKit` parking
+/// is constrained to a much wider titlebar remnant. Prefer the owning display,
+/// but use an outer display edge when its right corner borders another screen.
+/// Native parking does not change strip ownership or logical window size.
+pub(super) fn compact_parking(
+    size: IVec2,
+    owner: IRect,
+    displays: &[ParkingDisplay],
+    padding: IVec2,
+) -> ParkedGeometry {
+    let native_size = (size - padding * 2).max(IVec2::ONE);
+    displays
+        .iter()
+        .map(|display| {
+            // AppKit keeps at least a titlebar-height band vertically reachable.
+            // Request that stable band directly instead of repeatedly fighting it.
+            let origin = IVec2::new(display.bounds.max.x - 1, display.viewport.max.y - 32);
+            let native = IRect::from_corners(origin, origin + native_size);
+            let spill = displays
+                .iter()
+                .filter(|other| other.bounds != display.bounds)
+                .map(|other| intersection_area(native, other.bounds))
+                .sum::<i64>();
+            let key = (
+                spill,
+                display.bounds != owner,
+                -i64::from(display.bounds.max.x),
+                -i64::from(display.viewport.max.y),
+            );
+            (key, origin - padding, display.viewport.size() + padding * 2)
+        })
+        .min_by_key(|(key, _, _)| *key)
+        .map_or_else(
+            || ParkedGeometry {
+                frame: IRect::from_corners(owner.min, owner.min + size),
+                size_limit: size,
+            },
+            |(_, origin, size_limit)| ParkedGeometry {
+                frame: IRect::from_corners(origin, origin + size),
+                size_limit,
+            },
+        )
+}
 
 /// Park at the strip's left or right edge, accounting for physical frame gaps.
 pub(super) fn horizontal_parking(
@@ -25,6 +107,23 @@ pub(super) fn horizontal_parking(
     }
     frame.max.x = frame.min.x + width;
     (frame, offscreen)
+}
+
+/// AX cannot clip foreign windows at an interior monitor seam. Park before
+/// their native body (including a small rounding guard) enters a neighbor.
+pub(super) fn crosses_display_seam(
+    frame: IRect,
+    owner: IRect,
+    displays: &[IRect],
+    padding: IVec2,
+) -> bool {
+    let native = IRect::from_corners(
+        frame.min + padding - IVec2::splat(2),
+        frame.max - padding + IVec2::splat(2),
+    );
+    displays
+        .iter()
+        .any(|other| *other != owner && intersection_area(native, *other) > 0)
 }
 
 fn intersection_area(a: IRect, b: IRect) -> i64 {
@@ -72,9 +171,117 @@ pub(super) fn anchored_parking(
         .unwrap_or(frame)
 }
 
+/// Compatibility presentation for upstream configurations that retain slivers.
+pub(super) fn legacy_parking(
+    frame: IRect,
+    viewport: IRect,
+    owner: IRect,
+    displays: &[IRect],
+    config: &Config,
+    h_pad: i32,
+    motion: (bool, bool),
+) -> (IRect, bool) {
+    let (mut frame, mut offscreen) = horizontal_parking(frame, viewport, h_pad, config);
+
+    let anchored = anchored_parking(frame, owner, displays, offscreen, config.sliver_width());
+    let rerouted = anchored != frame;
+    frame = anchored;
+    offscreen |= rerouted;
+    // During swipe, keep full height. The vertical sliver inset only
+    // applies to horizontally off-screen windows, so they expose just
+    // a `sliver_height` fraction of their height at the viewport's
+    // vertical center.
+    if !motion.0 && offscreen {
+        // Don't compress stacked windows vertically when off-screen.
+        // The height reduction corrupts their proportions: when the
+        // column scrolls back on-screen, binpack_heights makes the
+        // last window absorb all remaining space.
+        if !motion.1 {
+            let inset = crate::util::round_px(
+                f64::from(viewport.height()) * (1.0 - config.sliver_height()) / 2.0,
+            );
+            frame.min.y += inset;
+            frame.max.y += inset;
+        }
+    }
+
+    // Keep the window anchored to its own display. The parked strip origin
+    // only accounts for the first window: everything sitting below it in a
+    // stack picks up that offset on top of the corner and lands past the
+    // bottom edge, fully inside the display underneath. macOS then adopts
+    // the window onto that display, and showing the workspace again brings
+    // it back there instead of here. Park those at the corner as well.
+    let park_row = viewport.max.y - super::PARKED_STRIP_SLIVER;
+    if frame.min.y > park_row {
+        let height = frame.height();
+        frame.min.y = park_row;
+        frame.max.y = park_row + height;
+    }
+
+    (frame, rerouted)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn partial_tile_parks_before_crossing_an_interior_monitor_seam() {
+        let left = IRect::new(0, 0, 2560, 1440);
+        let right = IRect::new(2560, 323, 4288, 1440);
+        assert!(crosses_display_seam(
+            IRect::new(2300, 42, 2872, 1331),
+            left,
+            &[left, right],
+            IVec2::splat(6)
+        ));
+        assert!(!crosses_display_seam(
+            IRect::new(1982, 42, 2554, 1331),
+            left,
+            &[left, right],
+            IVec2::splat(6)
+        ));
+    }
+
+    #[test]
+    fn compact_parking_uses_outer_edge_without_changing_size() {
+        let main = ParkingDisplay {
+            bounds: IRect::new(0, 0, 2560, 1440),
+            viewport: IRect::new(0, 30, 2560, 1331),
+        };
+        let laptop = ParkingDisplay {
+            bounds: IRect::new(2560, 323, 4288, 1440),
+            viewport: IRect::new(2560, 356, 4288, 1440),
+        };
+        let size = IVec2::new(572, 1313);
+        let padding = IVec2::splat(6);
+        for owner in [main, laptop] {
+            let parked = compact_parking(size, owner.bounds, &[main, laptop], padding).frame;
+            assert_eq!(parked.min, IVec2::new(4281, 1402));
+            assert_eq!(parked.size(), size);
+            let native = IRect::from_corners(parked.min + padding, parked.max - padding);
+            assert_eq!(intersection_area(native, main.bounds), 0);
+            assert_eq!(intersection_area(native, laptop.viewport), 32);
+        }
+    }
+
+    #[test]
+    fn compact_parking_is_stable_for_offsets_and_display_order() {
+        let upper = ParkingDisplay {
+            bounds: IRect::new(-1200, -900, 0, 0),
+            viewport: IRect::new(-1200, -870, 0, 0),
+        };
+        let lower = ParkingDisplay {
+            bounds: IRect::new(-1200, 0, 0, 900),
+            viewport: IRect::new(-1200, 30, 0, 850),
+        };
+        let size = IVec2::new(800, 600);
+        let a = compact_parking(size, upper.bounds, &[upper, lower], IVec2::ZERO);
+        let b = compact_parking(size, upper.bounds, &[lower, upper], IVec2::ZERO);
+        assert_eq!(a, b);
+        assert_eq!(a.frame.min, IVec2::new(-1, 818));
+        assert_eq!(intersection_area(a.frame, upper.bounds), 0);
+    }
 
     #[test]
     fn shared_edge_parks_on_the_free_outer_edge() {

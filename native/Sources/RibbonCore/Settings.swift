@@ -1,30 +1,93 @@
 import Foundation
 
 public enum ManagementScope: String, Codable, CaseIterable, Sendable {
-  case demo, selected
+  case demo, selected, all
+}
+
+public enum WindowWidthPolicy: String, Codable, CaseIterable, Sendable {
+  case preserve, fill
 }
 
 public struct RibbonSettings: Codable, Equatable, Sendable {
-  public var scope: ManagementScope = .demo
+  public var scope: ManagementScope = .all
   public var selectedBundleIDs: Set<String> = []
+  public var excludedBundleIDs: Set<String> = []
   public var gap: Int = 12
   public var windowPadding: Int { gap / 2 }
   public var animationSpeed: Int = 14
   public var centerFocused = false
+  public var widthPolicy: WindowWidthPolicy = .preserve
   public var gestureFingers = 0
+  public var shortcutOverrides: [String: [ShortcutChord]] = [:]
+  public var scrollModifiers: ShortcutModifiers = [.control, .option]
 
   public init() {}
+
+  private enum CodingKeys: String, CodingKey {
+    case scope, selectedBundleIDs, excludedBundleIDs, gap, animationSpeed, centerFocused,
+      gestureFingers, widthPolicy
+    case shortcutOverrides, scrollModifiers
+  }
+  public init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    scope = try values.decodeIfPresent(ManagementScope.self, forKey: .scope) ?? .all
+    // Existing opt-in selections no longer restrict automatic management.
+    if scope == .selected { scope = .all }
+    excludedBundleIDs =
+      try values.decodeIfPresent(Set<String>.self, forKey: .excludedBundleIDs) ?? []
+    selectedBundleIDs =
+      try values.decodeIfPresent(Set<String>.self, forKey: .selectedBundleIDs) ?? []
+    gap = try values.decodeIfPresent(Int.self, forKey: .gap) ?? 12
+    animationSpeed = try values.decodeIfPresent(Int.self, forKey: .animationSpeed) ?? 14
+    centerFocused = try values.decodeIfPresent(Bool.self, forKey: .centerFocused) ?? false
+    widthPolicy =
+      try values.decodeIfPresent(WindowWidthPolicy.self, forKey: .widthPolicy) ?? .preserve
+    gestureFingers = try values.decodeIfPresent(Int.self, forKey: .gestureFingers) ?? 0
+    shortcutOverrides =
+      try values.decodeIfPresent([String: [ShortcutChord]].self, forKey: .shortcutOverrides) ?? [:]
+    scrollModifiers =
+      try values.decodeIfPresent(ShortcutModifiers.self, forKey: .scrollModifiers) ?? [
+        .control, .option,
+      ]
+  }
 
   public static let fixtureBundleID = "dev.ribbon.fixture"
   public static let appBundleID = "dev.ribbon.app"
 
-  public var managedBundleIDs: Set<String> {
-    switch scope {
-    case .demo: return [Self.fixtureBundleID]
-    case .selected:
-      return selectedBundleIDs.filter(Self.validBundleID)
-        .subtracting([Self.appBundleID, "com.apple.systempreferences"])
+  public static let protectedBundleIDs: Set<String> = [appBundleID, "com.apple.systempreferences"]
+
+  public func manages(_ bundle: String) -> Bool {
+    guard Self.validBundleID(bundle), !Self.protectedBundleIDs.contains(bundle) else {
+      return false
     }
+    switch scope {
+    case .all: return !excludedBundleIDs.contains(bundle)
+    case .demo: return bundle == Self.fixtureBundleID
+    case .selected: return selectedBundleIDs.contains(bundle)
+    }
+  }
+
+  public func managedBundleIDs(in candidates: Set<String>) -> Set<String> {
+    candidates.filter(manages)
+  }
+
+  public var canManageApplications: Bool {
+    scope == .all || scope == .demo || selectedBundleIDs.contains(where: manages)
+  }
+
+  public var engineScopeEnvironment: [String: String] {
+    let selected: Set<String>
+    switch scope {
+    case .demo: selected = [Self.fixtureBundleID]
+    case .selected: selected = selectedBundleIDs.filter(manages)
+    case .all: selected = []
+    }
+    return [
+      "RIBBON_MANAGEMENT_SCOPE": scope == .all ? "all" : "selected",
+      "RIBBON_MANAGED_APPS": selected.sorted().joined(separator: ","),
+      "RIBBON_EXCLUDED_APPS": scope == .all
+        ? excludedBundleIDs.sorted().joined(separator: ",") : "",
+    ]
   }
 
   public static func validBundleID(_ value: String) -> Bool {
@@ -38,26 +101,35 @@ public struct RibbonSettings: Codable, Equatable, Sendable {
   public func validated() throws -> Self {
     guard (0...40).contains(gap), (8...24).contains(animationSpeed),
       [0, 3, 4].contains(gestureFingers),
-      selectedBundleIDs.allSatisfy(Self.validBundleID)
+      selectedBundleIDs.allSatisfy(Self.validBundleID),
+      excludedBundleIDs.allSatisfy(Self.validBundleID)
     else { throw SettingsError.invalid }
+    guard !scrollModifiers.isEmpty, scrollModifiers.rawValue & ~ShortcutModifiers.all.rawValue == 0
+    else {
+      throw SettingsError.invalid
+    }
+    try validateShortcuts()
     return self
   }
 
-  public func engineConfiguration() throws -> String {
+  public func engineConfiguration(reduceMotion: Bool = false) throws -> String {
     _ = try validated()
     let screenPadding = gap - windowPadding
     return """
       # Generated by Ribbon. Changes are owned by the app's settings.
       [options]
+      compact_parking = true
+      fill_available_width = \(widthPolicy == .fill)
       focus_follows_mouse = false
       mouse_follows_focus = false
-      animation_speed = \(animationSpeed)
+      animation_speed = \(reduceMotion ? 1_000_000 : animationSpeed)
       auto_center = \(centerFocused)
-      preset_column_widths = [0.33333, 0.5, 0.66667, 1.0]
+      preset_column_widths = [0.33333, 0.5, 0.66667, 0.75, 1.0]
 
       [padding]
-      top = \(screenPadding)
-      bottom = \(screenPadding)
+      # Per-window padding supplies stack gaps; cancel it at the outer vertical edges.
+      top = \(-windowPadding)
+      bottom = \(-windowPadding)
       left = \(screenPadding)
       right = \(screenPadding)
 
@@ -72,7 +144,7 @@ public struct RibbonSettings: Codable, Equatable, Sendable {
       [swipe]
       continuous = false
       [swipe.scroll]
-      modifier = "ctrl + alt"
+      modifier = "\(scrollModifiers.engineValue)"
       [swipe.gesture]
       fingers_count = \(gestureFingers)
       direction = "Natural"
@@ -85,21 +157,7 @@ public struct RibbonSettings: Codable, Equatable, Sendable {
       enabled = false
 
       [bindings]
-      window_focus_west = "ctrl + alt - leftarrow"
-      window_focus_east = "ctrl + alt - rightarrow"
-      window_focus_north = "ctrl + alt - uparrow"
-      window_focus_south = "ctrl + alt - downarrow"
-      window_swap_west = "ctrl + alt + shift - leftarrow"
-      window_swap_east = "ctrl + alt + shift - rightarrow"
-      window_resize = "ctrl + alt - r"
-      window_fullwidth = "ctrl + alt - f"
-      window_center = "ctrl + alt - c"
-      window_stack = "ctrl + alt - rightbracket"
-      window_unstack = "ctrl + alt + shift - rightbracket"
-      window_tabbeddisplay = "ctrl + alt + shift - t"
-      window_manage = "ctrl + alt - t"
-      window_nextdisplay = "ctrl + alt - n"
-      quit = "ctrl + alt - q"
+      \(bindingsConfiguration)
 
       """
   }

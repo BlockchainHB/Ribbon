@@ -1,9 +1,9 @@
-use bevy::app::{App, Plugin, Update};
+use bevy::app::{App, Plugin, PreUpdate, Update};
 use bevy::ecs::entity::Entity;
 use bevy::ecs::message::MessageReader;
 use bevy::ecs::query::{With, Without};
 use bevy::ecs::schedule::IntoScheduleConfigs as _;
-use bevy::ecs::system::{Commands, Local, Populated, Res, Single};
+use bevy::ecs::system::{Commands, Local, Populated, Query, Res, Single};
 use bevy::math::IRect;
 use bevy::time::Time;
 use std::time::{Duration, Instant};
@@ -65,6 +65,14 @@ impl Plugin for ScrollEventsPlugin {
             mission_control.is_none_or(|active| !active.0)
         };
 
+        app.add_systems(
+            PreUpdate,
+            stop_scroll_on_command
+                .after(crate::ecs::PreUpdateSet::Pump)
+                .before(crate::ecs::PreUpdateSet::Dispatch)
+                .run_if(on_message::<Event>),
+        );
+
         // Only the two gesture systems are gated on an input event. The rest of
         // the chain (inertia, snap force, integrator) must keep running after
         // the fingers stop sending events, since that's when they take over.
@@ -88,6 +96,27 @@ impl Plugin for ScrollEventsPlugin {
             )
                 .in_set(UpdateSet::Input),
         );
+    }
+}
+
+/// An explicit layout command takes over from momentum immediately, including
+/// when a virtual workspace is hidden. Never resume the old fling on return.
+fn stop_scroll_on_command(
+    mut messages: MessageReader<Event>,
+    strips: Query<Entity, With<Scrolling>>,
+    mut commands: Commands,
+) {
+    if messages.read().any(|event| {
+        matches!(
+            event,
+            Event::Command {
+                command: Command::Window(_)
+            }
+        )
+    }) {
+        for entity in &strips {
+            commands.entity(entity).remove::<Scrolling>();
+        }
     }
 }
 
@@ -153,6 +182,7 @@ fn swipe_gesture(
     // placement (center, snap) no longer describes where they want it.
     if let Ok(mut entity_commands) = commands.get_entity(*entity) {
         entity_commands.try_remove::<ManualStripOffset>();
+        entity_commands.try_remove::<crate::ecs::RepositionMarker>();
     }
 
     if touchpad_down && let Some(scrolling) = scrolling.as_mut() {
@@ -211,17 +241,14 @@ pub(super) fn swiping_timeout(
     mut commands: Commands,
 ) {
     const FINGER_LIFT_THRESHOLD: Duration = Duration::from_millis(50);
-    const MIN_VELOCITY_PX: f64 = 5.0;
-    // Predicts the distance the integrator is about to move, so it has to use
-    // the same bounded step the integrator does.
-    let dt = time.delta_secs_f64().min(MAX_STEP_SECS);
+    const MIN_VELOCITY_PX_PER_SEC: f64 = 20.0;
     let viewport_width = f64::from(active_display.bounds().width());
 
     for (entity, mut scroll) in strips {
         if time.elapsed().abs_diff(scroll.last_event) > FINGER_LIFT_THRESHOLD {
             scroll.is_user_swiping = false;
 
-            if scroll.velocity.abs() * dt * viewport_width < MIN_VELOCITY_PX
+            if scroll.velocity.abs() * viewport_width < MIN_VELOCITY_PX_PER_SEC
                 && let Ok(mut entity_commands) = commands.get_entity(entity)
             {
                 entity_commands.try_remove::<Scrolling>();
@@ -330,7 +357,7 @@ fn scrolling_integrator(
     };
 
     let scroll = &mut *strip;
-    if scroll.velocity.abs() > 0.0001 {
+    if !scroll.is_user_swiping && scroll.velocity.abs() > 0.0001 {
         scroll.position += scroll.velocity * dt * viewport_width * direction_modifier;
     }
 }
@@ -355,7 +382,12 @@ fn apply_scrolling_constraints(
         &config,
     ) {
         position.x = clamped_offset;
-        scroll.position = f64::from(clamped_offset);
+        // Preserve fractional travel inside the viewport. Quantizing it on
+        // every event discarded slow input and made small deltas feel sticky.
+        if clamped_offset != round_px(scroll.position) {
+            scroll.position = f64::from(clamped_offset);
+            scroll.velocity = 0.0;
+        }
     } else {
         scroll.velocity = 0.0;
     }

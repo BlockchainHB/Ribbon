@@ -1,83 +1,303 @@
-# Local beta verification — 20 October 2026
+# Local beta verification — 21 October 2026
 
-Ribbon 0.1.1 was built, installed and verified as a local ad-hoc signed app.
-The installed optimized engine and native executable match the delivered ZIP.
-The machine-readable results, artifact hashes and physical checks are in
-[verification.json](verification.json).
+Ribbon 0.2.0 build 16 adds side-by-side window pairing, separate two-column
+arrangements and group-aware focus/reorder/monitor transfer. Build 15's session
+controls and build 14's motion improvements remain. The installed app is
+`~/Applications/Ribbon.app`; the deliverable is `build/Ribbon-beta.zip`.
+It is Developer ID signed and not notarized. Current hashes, receipts and
+limitations are in [verification.json](verification.json).
+
+## Pairing (build 16)
+
+[Behavior and usage](pairing.md). `scripts/verify.sh` passed: 46+483 default Rust,
+39+400 shipping Rust, and 26 Swift tests. Eleven pairing regressions cover join,
+fit, focus, block reorder, stack leader removal, ungroup geometry, insertion,
+accepted width readback, fill policy, viewport resize, and simulated transfers
+between unequal monitors. Format, Clippy, generated configuration and signature
+checks passed. The archive CRC and both archived executable bytes match the
+installed app; its engine hash matches the native QA receipt.
+
+[Native receipt](../build/qa/pairing/build16-release-2/report.json): **14 checks
+passed** using only disposable managed fixtures and an excluded sentinel. Real
+window measurements verify ½–½, ⅓–⅔ and ⅔–⅓, stationary internal focus, whole-pair
+reordering, native activation of a hidden pair member, actual context-menu
+Ungroup, independent arrangement, start/pause/restart and frame restoration.
+The overview's [light](../build/qa/pairing/build16-release-2/pair-overview-light.png)
+and [dark](../build/qa/pairing/build16-release-2/pair-overview-dark.png) native
+captures were visually inspected. System appearance and privacy grants were not
+changed. The first candidate's QA receipt cast failed after the native menu
+clicked successfully; it is retained separately and not counted as passing.
+
+Hardware: built-in Retina display, 1728×1117 logical points at 2× scale. The user
+chose one-display verification. Physical dual-monitor pairing, mixed-scale
+transfers, unplug/reconnect and second-monitor edge flashes remain unverified.
+Actual Raycast Quicklink UI execution remains separate from the passed native
+application-activation test. Pair membership is intentionally session-local.
+
+## Session controls and menu bar (build 15)
+
+The General switch previously disabled whenever `recoveryPending` was true,
+which includes every active session. This made a responsive app appear frozen.
+The switch and menu now share one availability rule: a running session can be
+paused despite its recovery journal; starting/stopping and pending old recovery
+still block conflicting operations. Permission remains checked by the start flow.
+
+Ribbon explicitly sets its own status item's public `isVisible` property and
+supplies a symbol fallback if its branded image cannot load. The native menu is
+populated before the first click; waiting for `menuWillOpen` left it empty and
+inert. Global engine chords are cleared while the menu is closed.
+Apple documents visibility persistence via `autosaveName` in
+[NSStatusItem.isVisible](https://developer.apple.com/documentation/appkit/nsstatusitem/isvisible).
+No Control Center preference database, other app setting, or privacy grant was edited.
+
+`scripts/verify.sh` passed: 46+472 default Rust, 39+389 shipping Rust, and 25 Swift
+tests. Three added UI component tests cover running/recovery availability,
+transition/start guards, and initial native menu contents.
+Log: `/tmp/ribbon-controls-verify-installed.log`.
+
+`build/qa/controls/build15-release-5/report.json` records 16 passing native checks.
+Actual mouse clicks performed on -> off -> on -> off through the General switch,
+including an active recovery journal. An external native Accessibility press opened
+the actual Control Center-hosted icon; its menu had nonzero rendered dimensions
+and a Settings row, and Escape closed it. The external driver is retained as
+`build/qa/controls/build15-release-5/driver.py`. Earlier failed candidates remain
+in that directory's siblings. AppKit proxy status-item coordinates proved unsuitable
+for that check; acceptance uses the external native accessibility tree.
+
+The fixture scope and excluded sentinel remained enforced. Existing movement,
+resizing, hidden-tile focus and drag checks also passed: 314 native frame samples,
+77 moving samples, and 12 pt moving/settled gaps. Only one physical display was
+connected. Normal Ribbon was reopened paused after QA.
+
+## Continuous motion (build 14)
+
+`scripts/verify.sh` passed: 46 library + 472 binary Rust tests with default
+features, 39 library + 389 binary tests with shipping features, and 22 Swift tests.
+Formatting, Clippy, generated configuration and bundle signatures passed.
+Log: `/tmp/ribbon-motion-verify-installed.log`.
+
+`build/qa/motion/build14-release-5/report.json` records 14 passing native checks,
+using disposable fixtures only. Native modifier-scroll input moved the strip.
+Repeated commands interrupted movement and resizing before completion and settled.
+The fixture recorded 308 native geometry samples, including 76 moving samples;
+minimum moving gap and settled gap were both 12 pt. No overlapping visible tiles
+were observed. No neighbor spill was observed, but only one physical display was
+connected, so this is not dual-monitor proof. Native icon drag, arrow/Return
+navigation, hidden-tile focus, full height, stack gaps, excluded sentinel,
+restore and restart all passed. The engine hash matches the installed signed app.
+After fixture QA completed, the normal app was reopened and its previous running
+user session resumed. No automated frame checks ran against personal apps.
+
+Actual light/dark native captures were inspected at
+`build/qa/motion/build14-release-5/overview-light.png` and `overview-dark.png`.
+Capture used the external, user-authorized macOS screenshot tool; Ribbon did not
+receive a new Screen Recording grant. The repeated generic icons belong to the
+fixture application. The engine remains the sole owner of layout geometry/order.
+See [motion audit](motion-audit.md) for findings, timing and unperformed checks.
+
+Earlier candidates are retained. Release-1 hit LaunchServices -600 before testing.
+Release-2/3 failed a final gap assertion with a single full-width visible tile;
+recorded native motion itself retained 12 pt separation. Release-4 passed 14
+interaction checks, but screenshot commands produced no files; it is not used as
+visual acceptance. Release-5 requires actual image files and captures externally.
+A physical second monitor, real finger swipe feel, slowed screen-video review,
+and changing the OS Reduce Motion preference were not verified. The instant
+engine path and UI Reduce Motion branches were inspected/tested in software.
+
+## Icon overview and vertical spacing (build 13)
+
+`scripts/verify.sh` passed: 46 library + 468 binary Rust tests with default
+features, 39 library + 385 binary tests with shipping features, and 22 Swift tests.
+Formatting, Clippy, generated engine configuration and bundle signatures passed.
+Current log: `/tmp/ribbon-overview-verify.log`.
+
+`build/qa/overview/release-9/report.json` records 11 passing native checks using
+only disposable fixtures and an excluded sentinel. A native injected Control–Option–Tab
+opened the overview; a native mouse drag inserted the column; arrow/Return
+navigation and clicking a genuinely offscreen tile restored focus. The sentinel
+never moved, pause restored original frames, and restart/recovery passed.
+
+On the built-in 1728 × 1117 display, the full-width native frame was x=12, y=33,
+width=1704, height=1084: it reaches the usable bottom at 1117. Two stacked windows
+ran from y=33 to 569 and y=581 to 1117, preserving exactly 12 pt internally and
+zero outer vertical margin. These are native frame observations, not mocked proof.
+Only the built-in display was connected. Build 13 has not passed physical
+second-monitor checks; the engine tests cover independent strips and rejected
+cross-display drops. Older dual-display receipts remain historical.
+
+Actual native light/dark captures were inspected at
+`build/qa/overview/release-9/overview-light.png` and `overview-dark.png`.
+The overview is centered, sized to its contents and uses 80 pt app icons with a
+single title. The repeated generic icons in these captures belong to the disposable
+fixture app; normal use resolves each application's installed icon. The normal
+app was reopened paused after QA; no unrestricted engine was launched by testing.
+Earlier failed candidates were retained in `build/qa/overview/`. In particular,
+`diagnostic-3` included a CLI intervention and is not an acceptance receipt.
+
+## Width preset (build 12)
+
+Width cycling now uses 33%, 50%, 67%, 75%, 100%. The installed build’s generated
+configuration includes the new preset and passes engine config validation.
+`scripts/verify.sh` passed (`/tmp/ribbon-width-step-verify.log`). Installation
+retains build 11’s certificate-backed signing requirement; the reopened GUI
+shows Accessibility Allowed. Window management was left paused. No new physical
+width-cycle test was run, and no unrestricted engine was launched by QA.
+
+## Permission onboarding (build 11 history; resolved in build 12)
+
+Installed build 11 uses the existing Developer ID identity instead of an ad-hoc
+code hash. The native app and engine have identical certificate-backed designated
+requirements. The build script selects a unique Developer ID identity or accepts
+RIBBON_SIGNING_IDENTITY; debug builds stay ad hoc by default. No signing identity,
+private-key ACL or OS privacy grant was created or modified by QA.
+
+The General switch remains enabled while permission is missing and opens the
+permission flow. A native help line explains the gate. Cooperative activation
+brought System Settings forward immediately when the actual button was pressed.
+Permission refreshes on app activation and while the active window awaits approval.
+The native and engine permission checks remain enforced.
+
+The build passed scripts/verify.sh, signature validation and archive/hash checks.
+GUI AX verified the switch is enabled. The user subsequently reported that approval
+still loops. Read-only TCC logs from the LaunchServices-launched GUI and its child
+confirm `Failed to match existing code requirement` for `dev.ribbon.app` and
+`kTCCServiceAccessibility` (OSStatus -67050). The saved requirement is the old
+`cdhash e463b18de8bdb06671037130e348fa887fd7fb6e`; the current native and engine
+requirements are certificate-backed. Enabling the existing row did not replace
+that requirement. After explicit user authorization, quit Ribbon and ran only
+`tccutil reset Accessibility dev.ribbon.app`; the tool reported success. Reopened
+the installed signed app and used its General permission button. System Settings
+is frontmost; native AX confirms Ribbon has a fresh unchecked row (AXValue=0).
+Other apps’ grants were not changed. The user then enabled the new row. The real GUI reported Allowed after
+installing build 12, confirming that approval survived the signed update.
+See `../build/qa/permission-identity/diagnosis.json` for bounded evidence.
+Build 10 layout receipts below are not claimed as build 11 hardware QA.
+
+Sources: [Apple code identity](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements)
+and [cooperative activation](https://developer.apple.com/documentation/appkit/passing-control-from-one-app-to-another-with-cooperative-activation).
 
 ## Automated checks
 
-| Check | Result |
-| --- | --- |
-| Rust default features | 46 library + 448 binary tests passed |
-| Rust shipping configuration, without Lua | 39 library + 365 binary tests passed |
-| Native core | 7 tests passed |
-| Rust formatting and Clippy, warnings denied | Passed |
-| Swift formatting | Passed |
-| Deep strict bundle signature verification | Passed |
-| ZIP integrity and packaged executable hashes | Passed |
+`scripts/verify.sh` passed: 46 Rust library + 472 binary tests with default
+features, 39 library + 389 binary tests with shipping features, and 25 Swift
+core/component tests. Formatting, Clippy with warnings denied, generated config
+and staged bundle signature passed. Feature suites overlap and are counted
+separately. Native component tests do not establish physical desktop behavior.
 
-The shipping-feature tests overlap the default-feature suite. They are recorded
-separately rather than added to a unique test count.
+Tests cover scope enforcement, automatic-policy migration, exclusions, recovery,
+shortcut persistence/conflicts, compact parking geometry, simulated native size
+clamping, external focus reveal, and native Space activation without logical
+display migration. Missing/invalid engine policy fails closed. QA always uses
+an explicit disposable-fixture allowlist.
 
-## Actual desktop checks
+## Width-policy checks (build 10)
 
-The installed release passed 11 single-strip checks and 11 dual-display checks
-using disposable test windows and an excluded sentinel. The suite verifies:
+Layout → Column widths offers Preserve widths (default) and Fill available space.
+Fill expands columns proportionally only while the entire strip fits its own
+usable monitor width. Overflow restores preferred widths and scrolls. Switching
+back restores preferences rather than retaining the automatic expansion. Width
+presets, full-width toggles and transfers use preferred widths in fill mode.
 
-- Exact application scope, native focus navigation, width changes and a 12 pt vertical stack gap.
-- Intermediate native frames during scrolling and resizing on both monitors.
-- Independent strips and shared-edge overflow on both physical monitors.
-- Full width and height using the selected monitor's usable dimensions.
-- Six display transfers preserving width proportions and other windows' widths.
-- Opening a ninth window on the second monitor while focus starts on the first.
-- Excluded-window protection, original-frame restoration and restart recovery.
-- Absence of title-bearing engine session snapshots.
+Eight engine regression tests cover proportional rounding, overflow, opening and
+closing windows, explicit resizing, centering, independent displays and six
+cross-display moves. Swift tests cover defaults, old-settings migration,
+persistence, generated configuration and rejecting an unknown policy.
 
-Hardware was macOS 27.0.1 on Apple silicon, with a 2560 × 1440 external display
-beside a 1728 × 1117 built-in display. Both used 2× scale. Physical frame reports
-come from the fixture's own NSWindows; engine ownership is checked separately.
-Focus observations include the fixture's 100 ms reporting cadence and CLI
-transport. They do not establish input-to-photon latency or language superiority.
+The debug engine passed eight native checks, including two live policy round
+trips on both physical monitors. Four 300-point fixture windows expanded to
+625 points on the external display and 417 on the laptop, keeping native 12-point
+gaps and edges. Returning to Preserve restored all eight to 300 points.
+Receipt and native screenshots: `build/qa/width-policy/debug-2`.
+The first failed setup receipt is retained as `build/qa/width-policy/debug`.
 
-The windowless parent-lifetime check also passed; its current polling observation
-is recorded in verification.json. It is separate from the real-window graceful
-pause/restoration checks.
+The native picker was inspected in light and dark appearances; selecting Fill
+persisted when reopening Settings. Captures: `build/qa/width-policy/settings-light`
+and `settings-dark`. These GUI checks used the debug-engine bundle with the same
+native settings views and did not enable unrestricted window management.
 
-The overlap fix was reproduced before changing product code: a full-width tile
-shrinking toward its next preset covered a returning neighbor in native frame
-samples. The engine now packs each animation frame from current widths and one
-strip origin, and commits AX operations in shrink / ordered movement / growth
-phases. The default 12 pt setting applies between tiles and at screen edges.
-Reordering snaps to new slots instead of animating tiles through each other.
+The optimized installed release also passed all eight focused native checks.
+Receipt: `build/qa/width-policy/release-2/report.json`; its native screenshots
+show both screens filled. The first direct launch restored no settings window,
+so the task never started; that timeout is retained under `release`. Opening
+through LaunchServices resolved the test-startup condition. Signatures, archive
+CRC, executable hashes and SDK 27 linkage were verified after installation.
 
-The installed optimized release retained a minimum 12 pt gap across 654 sampled
-frames (single strip plus both physical monitors), with no observed tile overlap.
-Reports are in build/qa/spacing-release-acceptance. All 22 desktop checks passed.
+## Physical parking checks (build 9)
 
-The motion fixture samples its own NSWindow frames on a nominal 60 Hz timer;
-these are sampled geometry observations, not compositor or visual proof. Only
-tiles with most of their area on the display are included. Parked edge slivers
-share their parking location and are excluded; display ownership remains a
-separate check. Raw motion samples and minimum gaps are retained in the QA output.
-The deterministic regression checks each simulated 20 ms frame through navigation,
-growth, shrink, stacking and reordering, while asserting resizing still animates.
+Build 9 passed 14 single-strip and 14 dual-monitor checks, plus
+parent-watchdog cleanup (371 ms observed). Receipt:
+`build/qa/offscreen-parking/release-build9-2/summary.json`.
 
-All desktop tests used explicit demo scope. Other window managers and system
-display/gesture preferences were left unchanged.
+Coverage includes exact scope, new-app admission, launcher-style activation,
+compact parking and external reveal on each monitor, monitor isolation, six
+width-preserving display transfers, opening another window, excluded-sentinel
+protection, original-frame restoration, and restart lifecycle.
 
-## Remaining verification
+Across 672 native NSWindow frame samples, neighboring-monitor body-spill samples
+were zero. The minimum observed moving gap was 11 pt; settled gaps were 12 pt.
+These are nominal 60 Hz geometry samples, not continuous compositor proof or
+input-to-photon timing. Parking residuals are excluded from content-gap checks
+but separately measured on every physical display.
 
-Physical unplug/reconnect, sleep/wake, clamshell transitions, portrait displays,
-mixed refresh rates and trackpad feel have not been exercised. Deterministic
-engine tests cover display removal/return, geometry changes and wake events.
+Hardware: macOS 27.0.1, Apple silicon, 2560 × 1440 Kuycon G32P beside a
+1728 × 1117 built-in display, both at 2× scale. The laptop sits to the right
+with its top offset 323 pt. Alternative topologies have deterministic coverage,
+not physical acceptance.
 
-Native UI visual capture was unavailable because the computer-use capture
-service could not start its screen stream. Compilation and native window tests
-passed; a visual review is not claimed. Accessibility trust was available to
-the test process; fresh Finder-launch permission onboarding was not verified.
+### Parking behavior and limits
 
-This build is not notarized and does not claim full ChainYourMac feature parity.
+Ribbon parks at a stable free outer right corner, preferring the owning monitor
+when safe. At shared monitor seams it parks before a partial tile body spills
+onto the neighbor. Native presentation may fit the parking host before moving;
+the logical size and original strip owner remain unchanged. Reveal restores
+intended native dimensions before focus reconciliation. Native Space activation
+does not migrate a parked tile into the neighbor's strip.
+
+The fixture acceptance budget permits a residual edge at most 1 logical point
+wide and 32 points tall. This is not universal zero-pixel invisibility across
+all apps or shadows. No automatic Dock minimization, app hiding, covering overlay
+or privileged opacity is used. Original requested/actual native probes are in
+`build/qa/offscreen-parking/probe` and `probe-full`. Failed candidate runs
+`dual-1` through `dual-8` are retained. `dual-9` is a passing debug-engine receipt;
+`release-build9-2` is the optimized installed release.
+
+### Actual Raycast Quicklink
+
+Separate physical integration receipt pending. Launcher-style activation in the
+release suite is passed; it is not represented as an actual Raycast pass.
+
+## Native settings review
+
+All four panes were captured and visually inspected in light and dark appearance:
+`build/qa/offscreen-parking/settings-build9-light` and `settings-build9-dark`.
+The views use a native NavigationSplitView sidebar, grouped forms, blue accent,
+SDK 27 glass controls, standard traffic lights and no sidebar-toggle button.
+Modifier and trackpad values align at the trailing edge.
+
+The search placeholder is Search. Native field glass has clearance above the
+list, avoiding the clipping in the user's screenshot; semantic text colors adapt
+to both appearances. Real typing filtered shortcuts, and the native clear button
+restored the rows. Shortcut editing opened and cancelled in the light appearance.
+Applications is now Excluded Apps: all normal open apps are managed automatically,
+and a switch opts its app out. Raw stored pane identifiers are retained.
+
+These screenshots predate only QA-harness focus synchronization changes, with
+identical settings views. No user acceptance is claimed. System appearance was
+not changed; the app-only QA appearance override was used. GUI permission
+onboarding remains separate from inherited CLI Accessibility trust.
+
+## Unverified
+
+Physical unplug/reconnect, sleep/wake, clamshell, portrait and mixed-refresh
+setups, trackpad feel, alternate keyboard layouts, full keyboard traversal,
+VoiceOver, increased-contrast settings, final remapped global-key dispatch and
+fresh GUI Accessibility onboarding remain unverified. The recorder's final full
+save/reset/alternate interaction matrix is not re-certified by the sheet check.
+Live adaptive Dock appearances remain unverified.
+
+Historical toolbar/column-form screenshots and prior build hashes are before
+states, not current visual evidence. The user's System Settings/sidebar direction
+supersedes the earlier toolbar study. The scoped audit is in [ui-audit.md](ui-audit.md).
 
 ## Reproduce
 
@@ -86,6 +306,6 @@ This build is not notarized and does not claim full ChainYourMac feature parity.
     scripts/verify.sh
     python3 scripts/desktop-qa.py "$HOME/Applications/Ribbon.app" "$PWD/build/qa/fresh-run"
 
-The desktop runner requires exactly two connected displays, a fresh output
-directory and no existing Ribbon instance. It restores and closes its own test
-windows, preserves failure evidence and stops its owned app process.
+Use a fresh output directory, exactly two displays, and no running Ribbon
+instance. The runner restores and closes only its disposable test windows.
+No unrestricted engine is used during automated QA.

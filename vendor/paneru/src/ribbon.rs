@@ -11,7 +11,10 @@ pub const FIXTURE_BUNDLE: &str = "dev.ribbon.fixture";
 const EXCLUDED_BUNDLES: [&str; 2] = ["dev.ribbon.app", "com.apple.systempreferences"];
 
 #[derive(Debug)]
-pub struct ApplicationScope(HashSet<String>);
+pub struct ApplicationScope {
+    selected: Option<HashSet<String>>,
+    excluded: HashSet<String>,
+}
 
 impl ApplicationScope {
     fn parse(value: Option<&str>) -> Self {
@@ -26,18 +29,63 @@ impl ApplicationScope {
                         .all(|b| b.is_ascii_alphanumeric() || b".-".contains(&b))
             })
         {
-            return Self(HashSet::new());
+            return Self {
+                selected: Some(HashSet::new()),
+                excluded: HashSet::new(),
+            };
         }
-        Self(ids.into_iter().map(str::to_string).collect())
+        Self {
+            selected: Some(ids.into_iter().map(str::to_string).collect()),
+            excluded: HashSet::new(),
+        }
+    }
+
+    fn with_policy(mode: Option<&str>, selected: Option<&str>, excluded: Option<&str>) -> Self {
+        match mode {
+            Some("all") => {
+                let excluded = excluded.unwrap_or("");
+                if excluded.is_empty() {
+                    Self {
+                        selected: None,
+                        excluded: HashSet::new(),
+                    }
+                } else {
+                    let parsed = Self::parse(Some(excluded));
+                    match parsed.selected {
+                        Some(ids) if !ids.is_empty() => Self {
+                            selected: None,
+                            excluded: ids,
+                        },
+                        _ => Self::parse(Some("")),
+                    }
+                }
+            }
+            None | Some("selected") => Self::parse(selected),
+            _ => Self::parse(Some("")),
+        }
     }
 
     fn allows(&self, bundle: &str) -> bool {
-        !EXCLUDED_BUNDLES.contains(&bundle) && self.0.contains(bundle)
+        !EXCLUDED_BUNDLES.contains(&bundle)
+            && bundle.contains('.')
+            && bundle
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b".-".contains(&b))
+            && !self.excluded.contains(bundle)
+            && self
+                .selected
+                .as_ref()
+                .is_none_or(|ids| ids.contains(bundle))
     }
 }
 
-static SCOPE: LazyLock<ApplicationScope> =
-    LazyLock::new(|| ApplicationScope::parse(std::env::var("RIBBON_MANAGED_APPS").ok().as_deref()));
+static SCOPE: LazyLock<ApplicationScope> = LazyLock::new(|| {
+    ApplicationScope::with_policy(
+        std::env::var("RIBBON_MANAGEMENT_SCOPE").ok().as_deref(),
+        std::env::var("RIBBON_MANAGED_APPS").ok().as_deref(),
+        std::env::var("RIBBON_EXCLUDED_APPS").ok().as_deref(),
+    )
+});
 
 pub fn allows_bundle(bundle: &str) -> bool {
     SCOPE.allows(bundle)
@@ -109,6 +157,33 @@ mod tests {
         assert!(scope.allows("com.apple.Safari"));
         assert!(!scope.allows("com.apple.Safari.Other"));
         assert!(!scope.allows("dev.ribbon.app"));
+    }
+
+    #[test]
+    fn automatic_scope_accepts_future_apps_but_preserves_exclusions() {
+        let scope = ApplicationScope::with_policy(Some("all"), None, Some("com.example.Ignored"));
+        assert!(scope.allows("com.apple.Safari"));
+        assert!(scope.allows("com.example.FutureApp"));
+        assert!(!scope.allows("com.example.Ignored"));
+        assert!(scope.allows("com.example.Ignored.Other"));
+        assert!(!scope.allows("dev.ribbon.app"));
+        assert!(!scope.allows("com.apple.systempreferences"));
+        assert!(!scope.allows(""));
+        assert!(!scope.allows("*"));
+        let empty = ApplicationScope::with_policy(Some("all"), None, Some(""));
+        assert!(empty.allows("com.example.New"));
+    }
+
+    #[test]
+    fn invalid_policy_and_invalid_exclusions_fail_closed() {
+        for (mode, excluded) in [("typo", ""), ("all", "*"), ("all", "com.example.Ignored,")] {
+            let scope = ApplicationScope::with_policy(Some(mode), None, Some(excluded));
+            assert!(!scope.allows(FIXTURE_BUNDLE));
+            assert!(!scope.allows("com.apple.Safari"));
+        }
+        let qa = ApplicationScope::with_policy(Some("selected"), Some(FIXTURE_BUNDLE), Some(""));
+        assert!(qa.allows(FIXTURE_BUNDLE));
+        assert!(!qa.allows("com.apple.Safari"));
     }
 
     #[test]

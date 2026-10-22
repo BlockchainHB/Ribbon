@@ -356,9 +356,12 @@ fn test_scrolling() {
         // The strip has come to rest mid-scroll: still one contiguous run of
         // 400px columns, none of them parked at an edge sliver.
         .on_iteration(5, move |world, _state| {
-            assert_window_at!(world, 0, -186, TEST_MENUBAR_HEIGHT);
-            assert_window_at!(world, 1, 214, TEST_MENUBAR_HEIGHT);
-            assert_window_at!(world, 2, 614, TEST_MENUBAR_HEIGHT);
+            let first = find_window_entity(0, world);
+            let x = world.get::<Position>(first).expect("first tile").x;
+            assert!((-224..0).contains(&x), "swipe travels within the strip");
+            for id in 0..3 {
+                assert_window_at!(world, id, x + id * TEST_WINDOW_WIDTH, TEST_MENUBAR_HEIGHT);
+            }
         })
         .run(commands);
 }
@@ -398,7 +401,7 @@ fn test_scrolling_stop() {
 }
 
 #[test]
-fn test_window_hidden_ratio() {
+fn focus_command_cancels_scroll_even_with_hidden_ratio() {
     let commands = vec![
         Event::MenuOpened { window_id: 0 },
         Event::Swipe {
@@ -427,7 +430,18 @@ fn test_window_hidden_ratio() {
         .on_iteration(2, |world, _state| {
             let entity = find_window_entity(0, world);
             let window = world.get::<Window>(entity).expect("finding window");
-            assert!(window.frame().min.x < 0);
+            assert_eq!(
+                window.frame().min.x,
+                0,
+                "focus must win over the previous fling"
+            );
+            assert!(
+                world
+                    .query::<&crate::ecs::Scrolling>()
+                    .iter(world)
+                    .next()
+                    .is_none()
+            );
         })
         .run(commands);
 }
@@ -3628,4 +3642,150 @@ fn test_focus_command_starts_animation_on_first_frame() {
         strip_x - initial_strip_x,
         "the window and its strip must advance by the same amount"
     );
+}
+
+#[test]
+fn compact_parking_preserves_logical_size_and_reveals_on_external_focus() {
+    let config: Config = (
+        MainOptions {
+            compact_parking: Some(true),
+            ..Default::default()
+        },
+        vec![],
+    )
+        .into();
+    TestHarness::new()
+        .with_config(config)
+        .with_windows(5)
+        .on_iteration(1, |world, state| {
+            let mut query = world.query::<(
+                &Window,
+                &crate::ecs::Bounds,
+                Has<crate::ecs::layout::parking::CompactParked>,
+            )>();
+            let hidden = query.iter(world).filter(|(_, _, parked)| *parked).count();
+            assert!(hidden > 0);
+            for (_, bounds, _) in query.iter(world) {
+                assert_eq!(bounds.0.x, TEST_WINDOW_WIDTH);
+            }
+            let entity = find_window_entity(4, world);
+            assert!(
+                world
+                    .get::<crate::ecs::layout::parking::CompactParked>(entity)
+                    .is_some()
+            );
+            world
+                .entity_mut(entity)
+                .insert(crate::ecs::VerifyWindowSize);
+            state.os_resize_window(4, Size::new(TEST_WINDOW_WIDTH, 400));
+            state.set_focused_window(4);
+        })
+        .on_iteration(2, |world, _| {
+            let (entity, _) = world
+                .query::<(Entity, &Window)>()
+                .iter(world)
+                .find(|(_, w)| w.id() == 4)
+                .unwrap();
+            assert!(
+                world
+                    .get::<crate::ecs::layout::parking::CompactParked>(entity)
+                    .is_none()
+            );
+            assert_focused!(world, 4);
+            assert_window_size!(
+                world,
+                4,
+                TEST_WINDOW_WIDTH,
+                TEST_DISPLAY_HEIGHT - TEST_MENUBAR_HEIGHT
+            );
+        })
+        .run(vec![
+            Event::MenuOpened { window_id: 0 },
+            Event::Command {
+                command: Command::Window(Operation::Focus(Direction::First)),
+            },
+            Event::WindowFocused { window_id: 4 },
+        ]);
+}
+
+#[test]
+fn compact_parking_does_not_migrate_a_tile_when_its_parking_space_activates() {
+    let config: Config = (
+        MainOptions {
+            compact_parking: Some(true),
+            ..Default::default()
+        },
+        vec![],
+    )
+        .into();
+    TestHarness::new()
+        .with_config(config)
+        .with_display(
+            EXT_DISPLAY_ID,
+            IRect::new(
+                TEST_DISPLAY_WIDTH,
+                0,
+                TEST_DISPLAY_WIDTH + EXT_DISPLAY_WIDTH,
+                EXT_DISPLAY_HEIGHT,
+            ),
+            vec![EXT_WORKSPACE_ID],
+        )
+        .with_windows(5)
+        .with_workspace_window(100, EXT_WORKSPACE_ID, |_| {})
+        .on_iteration(1, |world, state| {
+            let entity = find_window_entity(4, world);
+            assert!(
+                world
+                    .get::<crate::ecs::layout::parking::CompactParked>(entity)
+                    .is_some()
+            );
+            state.update_window(4, |window| window.workspace_id = EXT_WORKSPACE_ID);
+            state.activate_display(EXT_DISPLAY_ID);
+            state.focus_window(100);
+        })
+        .on_iteration(2, |world, _| {
+            crate::assert_on_workspace!(world, 4, TEST_WORKSPACE_ID);
+            crate::assert_not_on_workspace!(world, 4, EXT_WORKSPACE_ID);
+        })
+        .run(vec![
+            Event::MenuOpened { window_id: 0 },
+            Event::Command {
+                command: Command::Window(Operation::Focus(Direction::First)),
+            },
+            Event::SpaceChanged,
+        ]);
+}
+
+/// The direct finger delta is applied once. Inertia must wait for release,
+/// and fractional movement must survive successive sub-point input events.
+#[test]
+fn held_swipe_tracks_input_once_and_accumulates_fractional_points() {
+    let config: Config = (
+        MainOptions {
+            swipe_gesture_fingers: Some(3),
+            continuous_swipe: Some(false),
+            ..Default::default()
+        },
+        vec![],
+    )
+        .into();
+    let sensitivity = config.swipe_sensitivity();
+    let mut h = TestHarness::new().with_config(config).with_windows(5);
+    h.run(vec![Event::MenuOpened { window_id: 0 }]);
+    for _ in 0..10 {
+        h.app.world_mut().write_message(Event::Swipe {
+            delta: 0.0004,
+            fingers: 3,
+        });
+        h.app.update();
+    }
+    let world = h.world();
+    let (position, scroll) = world
+        .query_filtered::<(&Position, &crate::ecs::Scrolling), With<ActiveWorkspaceMarker>>()
+        .single(world)
+        .expect("scrolling strip");
+    let expected = -0.0004 * 10.0 * f64::from(TEST_DISPLAY_WIDTH) * sensitivity;
+    assert!(scroll.is_user_swiping);
+    assert!((scroll.position - expected).abs() < 0.000_001);
+    assert_eq!(position.x, crate::util::round_px(expected));
 }

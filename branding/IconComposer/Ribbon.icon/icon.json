@@ -1,0 +1,158 @@
+{
+  "fill-specializations": [
+    {
+      "value": {
+        "solid": "extended-srgb:0.969,0.973,0.980,1"
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": "system-dark"
+    },
+    {
+      "appearance": "tinted",
+      "value": "system-light"
+    }
+  ],
+  "groups": [
+    {
+      "name": "Default \u2014 original Cobalt, effects off",
+      "hidden-specializations": [
+        {
+          "value": false
+        },
+        {
+          "appearance": "dark",
+          "value": true
+        },
+        {
+          "appearance": "tinted",
+          "value": true
+        }
+      ],
+      "layers": [
+        {
+          "name": "Default \u2014 original Cobalt, effects off",
+          "image-name": "Cobalt-Original.png",
+          "glass": false,
+          "position": {
+            "scale": 0.9752380952380952,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "lighting": "combined",
+      "specular": false,
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      }
+    },
+    {
+      "name": "Dark \u2014 Cobalt on midnight, effects off",
+      "hidden-specializations": [
+        {
+          "value": true
+        },
+        {
+          "appearance": "dark",
+          "value": false
+        },
+        {
+          "appearance": "tinted",
+          "value": true
+        }
+      ],
+      "layers": [
+        {
+          "name": "Dark \u2014 Cobalt on midnight, effects off",
+          "image-name": "Cobalt-Dark.png",
+          "glass": false,
+          "position": {
+            "scale": 0.9752380952380952,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "lighting": "combined",
+      "specular": false,
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      }
+    },
+    {
+      "name": "Mono \u2014 isolated ribbon, native glass",
+      "hidden-specializations": [
+        {
+          "value": true
+        },
+        {
+          "appearance": "dark",
+          "value": true
+        },
+        {
+          "appearance": "tinted",
+          "value": false
+        }
+      ],
+      "layers": [
+        {
+          "name": "Fold shading",
+          "image-name": "Cobalt-Clear.png",
+          "glass": false,
+          "position": {
+            "scale": 0.7823554850800057,
+            "translation-in-points": [
+              -21.10293210321465,
+              -28.727207726683005
+            ]
+          },
+          "opacity": 0.55
+        },
+        {
+          "name": "Transparent folded ribbon",
+          "image-name": "Cobalt-Clear.png",
+          "glass": true,
+          "position": {
+            "scale": 0.7823554850800057,
+            "translation-in-points": [
+              -21.10293210321465,
+              -28.727207726683005
+            ]
+          },
+          "fill": {
+            "solid": "extended-gray:1,1"
+          }
+        }
+      ],
+      "lighting": "combined",
+      "specular": true,
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.25
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.35
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
+  }
+}

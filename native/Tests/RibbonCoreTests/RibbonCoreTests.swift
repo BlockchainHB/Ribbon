@@ -5,6 +5,20 @@ import XCTest
 @testable import RibbonCore
 
 final class RibbonCoreTests: XCTestCase {
+  func testWidthPolicyDefaultsMigratesAndReachesEngine() throws {
+    let legacy = try JSONDecoder().decode(RibbonSettings.self, from: Data("{}".utf8))
+    XCTAssertEqual(legacy.widthPolicy, .preserve)
+    XCTAssertTrue(try legacy.engineConfiguration().contains("fill_available_width = false"))
+    var settings = legacy
+    settings.widthPolicy = .fill
+    let restored = try JSONDecoder().decode(
+      RibbonSettings.self, from: JSONEncoder().encode(settings))
+    XCTAssertEqual(restored.widthPolicy, .fill)
+    XCTAssertTrue(try restored.engineConfiguration().contains("fill_available_width = true"))
+    XCTAssertThrowsError(
+      try JSONDecoder().decode(
+        RibbonSettings.self, from: Data(#"{"widthPolicy":"unknown"}"#.utf8)))
+  }
   func testEngineWireStateDecodesWithStableFieldNames() throws {
     let wire = Data(
       #"{"version":1,"active":{"focused_window_id":23},"virtual_workspaces":[{"windows":[{"window_id":23,"bundle_id":"dev.ribbon.fixture","floating":false}]}]}"#
@@ -14,16 +28,70 @@ final class RibbonCoreTests: XCTestCase {
     XCTAssertEqual(state.windows.first?.windowID, 23)
     XCTAssertEqual(state.windows.first?.bundleID, RibbonSettings.fixtureBundleID)
   }
-  func testScopeNeverExpandsOnEmptyOrMalformedSelection() throws {
+  func testAutomaticScopeIncludesNewAppsAndHonorsExactExclusions() throws {
     var settings = RibbonSettings()
-    XCTAssertEqual(settings.managedBundleIDs, [RibbonSettings.fixtureBundleID])
+    XCTAssertEqual(settings.scope, .all)
+    XCTAssertTrue(settings.canManageApplications)
+    XCTAssertTrue(settings.manages("com.apple.Safari"))
+    XCTAssertTrue(settings.manages("com.example.NewlyLaunched"))
+    settings.excludedBundleIDs = ["com.apple.Safari"]
+    XCTAssertFalse(settings.manages("com.apple.Safari"))
+    XCTAssertTrue(settings.manages("com.apple.Safari.Other"))
+    XCTAssertFalse(settings.manages(RibbonSettings.appBundleID))
+    XCTAssertFalse(settings.manages("com.apple.systempreferences"))
+    XCTAssertEqual(settings.engineScopeEnvironment["RIBBON_MANAGEMENT_SCOPE"], "all")
+    XCTAssertEqual(settings.engineScopeEnvironment["RIBBON_EXCLUDED_APPS"], "com.apple.Safari")
+    let restored = try JSONDecoder().decode(
+      RibbonSettings.self, from: JSONEncoder().encode(settings))
+    XCTAssertEqual(restored, settings)
+  }
+
+  func testExplicitAndDemoScopesCannotExpandToOtherApplications() throws {
+    var settings = RibbonSettings()
+    settings.scope = .demo
+    XCTAssertEqual(
+      settings.managedBundleIDs(in: [RibbonSettings.fixtureBundleID, "com.apple.Safari"]),
+      [RibbonSettings.fixtureBundleID])
+    XCTAssertEqual(settings.engineScopeEnvironment["RIBBON_MANAGEMENT_SCOPE"], "selected")
+    XCTAssertEqual(
+      settings.engineScopeEnvironment["RIBBON_MANAGED_APPS"], RibbonSettings.fixtureBundleID)
     settings.scope = .selected
-    XCTAssertTrue(settings.managedBundleIDs.isEmpty)
-    settings.selectedBundleIDs = [
-      "com.apple.Safari", RibbonSettings.appBundleID, "com.apple.systempreferences", "*",
-    ]
-    XCTAssertEqual(settings.managedBundleIDs, ["com.apple.Safari"])
+    XCTAssertFalse(settings.canManageApplications)
+    settings.selectedBundleIDs = ["com.apple.Safari", RibbonSettings.appBundleID, "*"]
+    XCTAssertEqual(settings.managedBundleIDs(in: settings.selectedBundleIDs), ["com.apple.Safari"])
     XCTAssertThrowsError(try settings.validated())
+    settings.selectedBundleIDs = []
+    settings.excludedBundleIDs = ["*"]
+    XCTAssertThrowsError(try settings.validated())
+  }
+
+  func testAutomaticRecoveryCoversNewApplicationsButNeverExcludedOnes() throws {
+    let journal = try RecoveryJournal(
+      windows: [], scope: .all,
+      excludedBundleIDs: ["com.example.Ignored"]
+    ).validated()
+    XCTAssertEqual(journal.version, 2)
+    let restored = try JSONDecoder().decode(
+      RecoveryJournal.self, from: JSONEncoder().encode(journal)
+    ).validated()
+    XCTAssertEqual(
+      restored.recoveryBundleIDs(in: [
+        "com.example.New", "com.example.Ignored",
+        RibbonSettings.appBundleID, "com.apple.systempreferences",
+      ]), ["com.example.New"])
+    let old = try RecoveryJournal(windows: [], managedBundleIDs: ["com.example.Original"])
+      .validated()
+    XCTAssertEqual(old.recoveryBundleIDs(in: ["com.example.New"]), ["com.example.Original"])
+    var data = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: JSONEncoder().encode(old)) as? [String: Any])
+    data.removeValue(forKey: "scope")
+    data.removeValue(forKey: "excludedBundleIDs")
+    let legacy = try JSONDecoder().decode(
+      RecoveryJournal.self,
+      from: JSONSerialization.data(withJSONObject: data)
+    ).validated()
+    XCTAssertEqual(legacy.scope, .selected)
+    XCTAssertEqual(legacy.recoveryBundleIDs(in: ["com.example.New"]), ["com.example.Original"])
   }
 
   func testInvalidPersistedSettingsCannotBecomeEngineConfiguration() throws {

@@ -1,8 +1,22 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ribbon local beta</title><style>body{font:17px/1.65 system-ui;margin:64px auto;padding:0 24px;max-width:720px;background:#f7f5ef;color:#23302b}h1{font-size:44px}a{color:#176448}code{font-size:14px}li{margin:8px 0}</style>
-<h1>Ribbon</h1><p>A local scrolling window manager with a native Mac interface. Beta 0.1.1.</p>
-<p>Start with <strong>Demo windows</strong> to try the strip. Choose <strong>Selected apps</strong> to explicitly select the applications Ribbon should manage. Pause restores original positions where applications accept them.</p>
-<ul><li>Control–Option + arrows: focus a window.</li><li>Add Shift to left/right arrows: reorder.</li><li>Control–Option–R: cycle width; F: full width; C: center.</li><li>Control–Option–]: stack. Add Shift to unstack.</li><li>Control–Option–Shift–T: switch a stack to tabs.</li><li>Control–Option + horizontal scroll: scroll the strip.</li><li>Control–Option–N: move a window to the next display, preserving its width proportion.</li><li>Control–Option–Q: stop the engine.</li></ul>
-<p>Ribbon requires Accessibility access. This local build is ad-hoc signed and is not notarized for public distribution. Rebuilding can require granting access again. No accounts, telemetry or network service are used.</p>
-<p>The engine is based on <a href="https://github.com/karinushka/paneru">Paneru</a>, under the MIT license. The bundled <a href="ThirdPartyNotices.txt">third-party notices</a> retain its attribution. The local fork adds application scoping, owned-helper lifetime and original-frame restoration.</p>
-<p>Each display has an independent strip. Hardware results are recorded separately; physical unplug/reconnect, portrait arrangements, trackpad feel and sleep/wake remain manual verification items. Other window-management tools may share shortcuts.</p></html>
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Using Ribbon</title>
+<style>
+:root{color-scheme:light dark;--blue:#2856ed}body{font:16px/1.65 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;margin:56px auto;padding:0 24px;max-width:660px;color:CanvasText;background:Canvas}h1{font-size:36px;line-height:1.15;font-weight:500;letter-spacing:-.03em}h2{font-size:21px;font-weight:500;margin-top:36px}a{color:var(--blue)}li{margin:10px 0}code{font-size:14px}footer{margin-top:40px;font-size:13px;color:GrayText}
+</style>
+<h1>Your windows, side by side.</h1>
+<p>Ribbon keeps your Mac windows in a scrolling strip. It starts paused.</p>
+<h2>Start</h2>
+<ol><li>Allow Ribbon in <strong>System Settings → Privacy &amp; Security → Accessibility</strong>.</li><li>In <strong>Ribbon → Settings → General</strong>, turn on <strong>Window management</strong>.</li></ol>
+<p>Normal open app windows join automatically. Use <strong>Excluded Apps</strong> to leave particular applications alone. Pause from the menu bar to restore window positions where apps allow it.</p>
+<h2>Move and arrange</h2>
+<ul><li><strong>Control–Option + arrows</strong> focuses a window; add Shift to left/right to reorder.</li><li><strong>Control–Option–R</strong> cycles widths. F toggles full width; C centers.</li><li><strong>Control–Option–Tab</strong> opens Arrange Windows. Drag an icon to reorder or click to focus.</li><li>Right-click an icon to pair neighboring columns, ungroup them, or choose a ½–½, ⅓–⅔, or ⅔–⅓ arrangement.</li><li><strong>Control–Option–]</strong> stacks vertically; add Shift to unstack.</li><li><strong>Control–Option–N</strong> moves to the next display.</li><li><strong>Control–Option–Q</strong> pauses and restores window positions.</li></ul>
+<p>Customize every assignment in <strong>Settings → Shortcuts</strong>. Pause before recording. Pairing shortcuts have no defaults.</p>
+<h2>Know the limits</h2>
+<p>Some apps enforce minimum sizes. Hidden windows may retain a small native edge. Pairs last for the current session. Physical multi-display pairing, mixed-scale transfers, reconnects, and sleep/wake are still being tested. Avoid using another window manager at the same time.</p>
+<p>Requires Apple silicon and macOS 15 or later. Settings and recovery data stay local. No accounts or telemetry are used.</p>
+<p><a href="https://github.com/BlockchainHB/Ribbon/blob/main/docs/GETTING_STARTED.md">Full guide</a> · <a href="https://github.com/BlockchainHB/Ribbon/issues">Report an issue</a></p>
+<footer>Ribbon builds on <a href="https://github.com/karinushka/paneru">Paneru</a>, under the MIT license. <a href="ThirdPartyNotices.txt">Upstream notices</a> · <a href="DependencyLicenses.txt">Dependency licenses</a></footer>
+</html>

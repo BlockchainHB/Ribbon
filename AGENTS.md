@@ -11,3 +11,6 @@ Run scripts/verify.sh for changed product code and record hardware QA separately
 Do not claim a real-desktop check passed on mocked evidence.
 
 Unless specifically asked, do not end responses with suggested next steps.
+
+Canonical workspace: `/Users/neat/dev/Ribbon`. The former Documents/Codex path
+is a compatibility symlink only. Use the canonical path for new work.

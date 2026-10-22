@@ -44,6 +44,7 @@ pub mod focus;
 pub mod layout;
 #[cfg(feature = "lua")]
 pub mod layout_ops;
+mod motion;
 pub mod mouse;
 pub mod params;
 pub(crate) mod restore;

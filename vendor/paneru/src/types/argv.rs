@@ -54,6 +54,30 @@ pub fn parse_command(argv: &[&str]) -> Result<Command> {
     })
 }
 
+fn horizontal_direction(value: &str) -> Result<Direction> {
+    match value {
+        "west" => Ok(Direction::West),
+        "east" => Ok(Direction::East),
+        _ => Err(ParseError::new("Pairing requires west or east")),
+    }
+}
+
+fn pair_ratio(value: &str) -> Result<f64> {
+    let ratio = match value {
+        "half" => 0.5,
+        "third" => 1.0 / 3.0,
+        "twothirds" => 2.0 / 3.0,
+        _ => value
+            .parse::<f64>()
+            .map_err(|_| ParseError::new("Invalid pair ratio"))?,
+    };
+    if ratio.is_finite() && (0.1..=0.9).contains(&ratio) {
+        Ok(ratio)
+    } else {
+        Err(ParseError::new("Pair ratio must be between 0.1 and 0.9"))
+    }
+}
+
 /// Parses a window operation (e.g. `["focus", "east"]`).
 fn parse_operation(argv: &[&str]) -> Result<Operation> {
     let command = *argv.first().unwrap_or(&"");
@@ -61,6 +85,31 @@ fn parse_operation(argv: &[&str]) -> Result<Operation> {
     let argument = || argv.get(1).ok_or_else(err).copied();
 
     Ok(match command {
+        "overview" if argv.len() == 1 => Operation::Overview,
+        "focusid" if argv.len() == 2 => Operation::FocusId(argument()?.parse().map_err(|_| err())?),
+        "reorder" if argv.len() == 4 => Operation::Reorder {
+            window: argument()?.parse().map_err(|_| err())?,
+            anchor: argv[2].parse().map_err(|_| err())?,
+            after: match argv[3] {
+                "before" => false,
+                "after" => true,
+                _ => return Err(err()),
+            },
+        },
+        "pair" if argv.len() == 2 => Operation::Pair(horizontal_direction(argument()?)?),
+        "pairid" if argv.len() == 3 => Operation::PairId {
+            window: argument()?.parse().map_err(|_| err())?,
+            direction: horizontal_direction(argv[2])?,
+        },
+        "unpair" if argv.len() == 1 => Operation::Unpair,
+        "unpairid" if argv.len() == 2 => {
+            Operation::UnpairId(argument()?.parse().map_err(|_| err())?)
+        }
+        "pairfit" if argv.len() == 2 => Operation::PairFit(pair_ratio(argument()?)?),
+        "pairfitid" if argv.len() == 3 => Operation::PairFitId {
+            window: argument()?.parse().map_err(|_| err())?,
+            ratio: pair_ratio(argv[2])?,
+        },
         // The bindings key splits on `_`, so `window_focus_unmanaged` arrives
         // here as ["focus", "unmanaged"] and the suffix tells us the variant.
         "focus" => match argument()? {
@@ -184,6 +233,28 @@ impl Operation {
     fn to_argv(&self) -> Vec<String> {
         let owned = |args: &[&str]| args.iter().map(|arg| (*arg).to_string()).collect();
         match self {
+            Operation::Overview => owned(&["overview"]),
+            Operation::FocusId(id) => vec!["focusid".into(), id.to_string()],
+            Operation::Reorder {
+                window,
+                anchor,
+                after,
+            } => vec![
+                "reorder".into(),
+                window.to_string(),
+                anchor.to_string(),
+                if *after { "after" } else { "before" }.into(),
+            ],
+            Operation::Pair(direction) => vec!["pair".into(), direction.token()],
+            Operation::PairId { window, direction } => {
+                vec!["pairid".into(), window.to_string(), direction.token()]
+            }
+            Operation::Unpair => owned(&["unpair"]),
+            Operation::UnpairId(id) => vec!["unpairid".into(), id.to_string()],
+            Operation::PairFit(ratio) => vec!["pairfit".into(), ratio.to_string()],
+            Operation::PairFitId { window, ratio } => {
+                vec!["pairfitid".into(), window.to_string(), ratio.to_string()]
+            }
             Operation::Focus(direction) => vec!["focus".to_string(), direction.token()],
             Operation::Swap(direction) => vec!["swap".to_string(), direction.token()],
             Operation::Center => owned(&["center"]),

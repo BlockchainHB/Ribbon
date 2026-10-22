@@ -327,14 +327,33 @@ fn migrate_moved_windows_to_space(
     };
 
     let managed_windows: HashMap<WinID, Entity> = world
-        .query::<(&Window, Entity, Has<Unmanaged>)>()
+        .query::<(
+            &Window,
+            Entity,
+            Has<Unmanaged>,
+            Has<crate::ecs::layout::parking::CompactParked>,
+        )>()
         .iter(world)
-        .filter_map(|(window, entity, unmanaged)| (!unmanaged).then_some((window.id(), entity)))
+        .filter_map(|(window, entity, unmanaged, parked)| {
+            (!unmanaged && !parked).then_some((window.id(), entity))
+        })
         .collect();
     if managed_windows.is_empty() {
         return;
     }
 
+    let stable_owned = if world.resource::<Config>().compact_parking() {
+        world
+            .query::<(&LayoutStrip, &ChildOf)>()
+            .iter(world)
+            .filter(|(_, parent)| {
+                parent.parent() != display_entity && world.get::<Display>(parent.parent()).is_some()
+            })
+            .flat_map(|(strip, _)| strip.all_windows())
+            .collect::<EntityHashSet>()
+    } else {
+        EntityHashSet::default()
+    };
     let moved_entities: EntityHashSet = {
         let mut strip_query = world.query::<(&LayoutStrip, Has<NativeFullscreenMarker>)>();
         let strips_in_space: Vec<&LayoutStrip> = strip_query
@@ -349,6 +368,7 @@ fn migrate_moved_windows_to_space(
         win_ids
             .into_iter()
             .filter_map(|id| managed_windows.get(&id).copied())
+            .filter(|entity| !stable_owned.contains(entity))
             .filter(|&entity| {
                 !strips_in_space.iter().any(|strip| strip.contains(entity))
                     && !fullscreen_strips.iter().any(|strip| strip.contains(entity))

@@ -52,6 +52,17 @@ pub async fn query(kind: StateQueryKind) -> Result<String> {
     }
 }
 
+/// Read the engine's column tree for Ribbon's presentation-only overview.
+async fn overview_state() -> Result<String> {
+    let response: Response = connect()?.call(&Request::WindowSet).await?;
+    match response {
+        Response::WindowSet(state) => {
+            serde_json::to_string(&state).map_err(|err| Error::Generic(err.to_string()))
+        }
+        other => Err(unexpected(&other)),
+    }
+}
+
 /// Reads or writes the script-state store and prints the answer as JSON.
 ///
 /// # Errors
@@ -135,6 +146,10 @@ pub fn run(command: ClientCommand) -> Result<()> {
                 Ok(())
             }
             ClientCommand::Subscribe => subscribe().await,
+            ClientCommand::Overview => {
+                println!("{}", overview_state().await?);
+                Ok(())
+            }
         }
     })
 }
@@ -143,6 +158,7 @@ pub fn run(command: ClientCommand) -> Result<()> {
 /// answer. Distinct from [`Request`], which is only what crosses to the daemon.
 #[derive(Debug)]
 pub enum ClientCommand {
+    Overview,
     Send(Vec<String>),
     Query(StateQueryKind),
     ScriptState(ScriptStateRequest),

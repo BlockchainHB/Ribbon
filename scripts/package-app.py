@@ -6,7 +6,10 @@ import shutil
 import subprocess
 import sys
 
-root, swift_bin, staging, engine = map(pathlib.Path, sys.argv[1:])
+root, swift_bin, staging, engine = map(pathlib.Path, sys.argv[1:5])
+signing_kind = sys.argv[5] if len(sys.argv) > 5 else "ad-hoc"
+release = json.loads((root / "release.json").read_text())
+source_commit = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
 app = staging / "Ribbon.app"
 if app.exists():
     shutil.rmtree(app)
@@ -20,12 +23,13 @@ def bundle(path, name, identifier, executable, source):
     plist = {
         "CFBundleIdentifier": identifier, "CFBundleName": name,
         "CFBundleDisplayName": name, "CFBundleExecutable": executable,
-        "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.1.1",
-        "CFBundleVersion": "2", "LSMinimumSystemVersion": "15.0",
+        "CFBundlePackageType": "APPL", "CFBundleShortVersionString": release["version"],
+        "CFBundleVersion": release["build"], "LSMinimumSystemVersion": "15.0",
         "NSHighResolutionCapable": True, "NSPrincipalClass": "NSApplication",
     }
     if identifier == "dev.ribbon.app":
-        plist["CFBundleIconFile"] = "AppIcon"
+        plist["CFBundleIconFile"] = "Ribbon"
+        plist["CFBundleIconName"] = "Ribbon"
     with (path / "Contents" / "Info.plist").open("wb") as output:
         plistlib.dump(plist, output)
     return resources
@@ -39,9 +43,9 @@ license_text = (root / "vendor/paneru/LICENSE.txt").read_text()
     "Ribbon includes Paneru 0.5.2, commit 12c58b2225a40e434053ea9343a41e2012466f9a.\n"
     "https://github.com/karinushka/paneru\nLocal integration changes: vendor/paneru/RIBBON.md\n\n" + license_text)
 (resources / "BUILD.json").write_text(json.dumps({
-    "version": "0.1.1", "engine": "Paneru 0.5.2",
+    "version": release["version"], "build": release["build"], "engine": "Paneru 0.5.2",
     "upstream_commit": "12c58b2225a40e434053ea9343a41e2012466f9a",
-    "signing": "local ad-hoc", "notarized": False,
+    "signing": signing_kind, "source_commit": source_commit,
     "engine_profile": engine.parent.name,
 }, indent=2))
 shutil.copy2(root / "docs/about.html", resources / "README.html")

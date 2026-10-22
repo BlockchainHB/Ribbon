@@ -17,6 +17,24 @@ if [ -e "$DESTINATION" ]; then
   fi
 fi
 mkdir -p "$HOME/Applications"
-ditto "$SOURCE" "$DESTINATION"
-codesign --verify --deep --strict "$DESTINATION"
+INSTALL_DIRECTORY="$(mktemp -d "$HOME/Applications/.ribbon-install.XXXXXX")"
+trap 'rm -rf "$INSTALL_DIRECTORY"' EXIT
+ditto "$SOURCE" "$INSTALL_DIRECTORY/Ribbon.app"
+codesign --verify --deep --strict "$INSTALL_DIRECTORY/Ribbon.app"
+if [ -e "$DESTINATION" ]; then
+  mv "$DESTINATION" "$INSTALL_DIRECTORY/Previous.app"
+fi
+if ! mv "$INSTALL_DIRECTORY/Ribbon.app" "$DESTINATION"; then
+  if [ -e "$INSTALL_DIRECTORY/Previous.app" ]; then
+    mv "$INSTALL_DIRECTORY/Previous.app" "$DESTINATION"
+  fi
+  exit 1
+fi
+if ! codesign --verify --deep --strict "$DESTINATION"; then
+  mv "$DESTINATION" "$INSTALL_DIRECTORY/Failed.app"
+  if [ -e "$INSTALL_DIRECTORY/Previous.app" ]; then
+    mv "$INSTALL_DIRECTORY/Previous.app" "$DESTINATION"
+  fi
+  exit 1
+fi
 printf 'Installed: %s\n' "$DESTINATION"

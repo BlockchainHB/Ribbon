@@ -12,6 +12,8 @@ use bevy::math::IRect;
 use tracing::{Level, instrument};
 use tracing::{debug, error, info};
 
+mod overview;
+mod pairing;
 mod query;
 
 use crate::config::Config;
@@ -41,7 +43,7 @@ pub use crate::types::commands::{
 type OffscreenStrips<'w, 's> = Query<
     'w,
     's,
-    (&'static mut LayoutStrip, &'static ChildOf),
+    (&'static mut LayoutStrip, Entity, &'static ChildOf),
     (With<SelectedVirtualMarker>, Without<ActiveWorkspaceMarker>),
 >;
 
@@ -61,6 +63,8 @@ type StripsWithVisibility<'w, 's> = Query<
 >;
 
 pub fn register_commands(app: &mut bevy::app::App) {
+    overview::register(app);
+    pairing::register(app);
     app.init_resource::<crate::menubar::MenuBarVisibility>()
         .add_systems(
             PreUpdate,
@@ -644,12 +648,19 @@ fn command_swap_focus(
             let pos_a = stack.iter().position(|i| i.contains(current))?;
             let pos_b = stack.iter().position(|i| i.contains(other_window))?;
             stack.swap(pos_a, pos_b);
-        } else if index < new_index {
-            (index..new_index).for_each(|idx| active_strip.swap(idx, idx + 1));
         } else {
-            (new_index..index)
-                .rev()
-                .for_each(|idx| active_strip.swap(idx, idx + 1));
+            let range = active_strip.movement_range(current)?;
+            let target = match direction {
+                Direction::West => range.start.checked_sub(1),
+                Direction::East => (range.end < active_strip.len()).then_some(range.end),
+                _ => Some(new_index),
+            }?;
+            let neighbor = active_strip.get(target).ok()?.top()?;
+            active_strip.reorder(
+                current,
+                neighbor,
+                matches!(direction, Direction::East | Direction::Last),
+            );
         }
         Some(current)
     };
@@ -718,6 +729,7 @@ fn command_center_window(
     windows: Windows,
     active_display: ActiveDisplay,
     window_manager: Res<WindowManager>,
+    config: Res<Config>,
     mut commands: Commands,
 ) {
     if filter_window_operations(&mut messages, |op| matches!(op, Operation::Center))
@@ -741,7 +753,20 @@ fn command_center_window(
             // record the placement as deliberate so a later reshuffle — a
             // repeated focus event, a return from another display — does not
             // re-derive the offset and undo the centering.
-            let strip_position = origin - layout_position.0;
+            let strip = active_display.active_strip();
+            let strip_position = strip
+                .reveal_frame(
+                    entity,
+                    size.y,
+                    active_display.actual_bounds(&config).width(),
+                    &|e| windows.moving_frame(e),
+                )
+                .map_or(origin - layout_position.0, |pair| {
+                    bevy::math::IVec2::new(
+                        center - pair.width() / 2 - pair.min.x,
+                        origin.y - layout_position.0.y,
+                    )
+                });
             let strip_entity = active_display.active_strip_entity();
             commands.reposition_entity(strip_entity, strip_position);
             mark_manual_offset(
@@ -794,7 +819,12 @@ fn resize_window(
     }
 
     let viewport = active_display.actual_bounds(&config);
-    let current_ratio = f64::from(frame.width()) / f64::from(viewport.width());
+    let preferred_width = if config.fill_available_width() {
+        windows.preferred_width(entity).unwrap_or(frame.width())
+    } else {
+        frame.width()
+    };
+    let current_ratio = f64::from(preferred_width) / f64::from(viewport.width());
     let widths = config.preset_column_widths();
     let fallback = *widths.first().unwrap_or(&0.5);
     let cycle = config.window_resize_cycle();
@@ -1001,7 +1031,15 @@ fn full_width_window(
         {
             _ = strip.unstack(entity);
         }
-        let width_ratio = windows.width_ratio(entity).unwrap_or(0.5);
+        let width_ratio = if config.fill_available_width() {
+            f64::from(
+                windows
+                    .preferred_width(entity)
+                    .unwrap_or(viewport.width() / 2),
+            ) / f64::from(viewport.width())
+        } else {
+            windows.width_ratio(entity).unwrap_or(0.5)
+        };
         if let Ok(mut entity_commands) = commands.get_entity(entity) {
             entity_commands.try_insert(FullWidthMarker { width_ratio });
         }
@@ -1129,11 +1167,7 @@ fn copy_window_rule(
 /// * `commands` - Bevy commands to modify entities and trigger events.
 fn to_next_display(
     mut messages: MessageReader<Event>,
-    windows: Windows,
-    mut active_display: ActiveDisplayMut,
-    mut other_workspaces: OffscreenStrips,
-    window_manager: Res<WindowManager>,
-    config: Res<Config>,
+    mut transfer: pairing::TransferParams,
     mut commands: Commands,
 ) {
     let Some(Operation::ToNextDisplay(move_focus)) =
@@ -1144,6 +1178,18 @@ fn to_next_display(
     else {
         return;
     };
+
+    if transfer.transfer_pair(*move_focus, &mut commands) {
+        return;
+    }
+    let pairing::TransferParams {
+        windows,
+        mut active_display,
+        mut other_workspaces,
+        docks: _,
+        window_manager,
+        config,
+    } = transfer;
 
     let Some((window, entity, unmanaged)) = windows
         .focused()
@@ -1176,9 +1222,10 @@ fn to_next_display(
     let center = other.bounds().center().x;
     let target_display_id = other.id();
 
-    let Some(size) = windows.size(entity) else {
+    let Some(mut size) = windows.moving_frame(entity).map(|frame| frame.size()) else {
         return;
     };
+    size.x = windows.preferred_width(entity).unwrap_or(size.x);
     let width_ratio =
         (source_viewport_width > 0).then(|| f64::from(size.x) / f64::from(source_viewport_width));
     let dest = other.bounds().min.with_x(center - size.x / 2);
@@ -1206,9 +1253,9 @@ fn to_next_display(
 
     // Insert into the target display's selected strip.
     if let Ok(target_space_id) = window_manager.active_display_space(target_display_id)
-        && let Some((mut target_strip, child)) = other_workspaces
+        && let Some((mut target_strip, _, child)) = other_workspaces
             .iter_mut()
-            .find(|(strip, _)| strip.id() == target_space_id)
+            .find(|(strip, _, _)| strip.id() == target_space_id)
     {
         target_strip.append(entity);
         commands.reshuffle_around(entity);

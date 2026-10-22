@@ -5,11 +5,14 @@ mod interaction;
 mod mocks;
 mod motion;
 mod mouse_focus;
+mod overview;
+mod pairing;
 mod session_restore;
 mod state;
 mod tabbed_display;
 mod tabs;
 mod tiling;
+mod width_policy;
 
 pub(crate) use harness::*;
 pub(crate) use mocks::*;

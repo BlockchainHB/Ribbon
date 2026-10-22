@@ -25,6 +25,7 @@ use super::{
 
 use crate::config::{Config, decorations::BorderRadiusOption};
 use crate::ecs::display::FloatingLayer;
+use crate::ecs::layout::parking::CompactParked;
 use crate::ecs::layout::{Column, LayoutStrip};
 use crate::ecs::params::{ActiveDisplay, FrameActivity, Windows};
 use crate::ecs::{
@@ -61,6 +62,7 @@ type MovableWindows<'w, 's> = Query<
         &'static Bounds,
         Option<&'static Unmanaged>,
         Has<RepositionMarker>,
+        Has<CompactParked>,
     ),
     Without<LayoutStrip>,
 >;
@@ -78,11 +80,15 @@ type ResizableWindows<'w, 's> = Query<
         &'static mut Bounds,
         Option<&'static Unmanaged>,
         Has<ResizeMarker>,
+        Has<CompactParked>,
     ),
     Without<LayoutStrip>,
 >;
 
-const ANIAMTE_SNAP_THRESHOLD: f32 = 5.0;
+// Parked native windows may be constrained to the parking display's size.
+// Only logical bounds animate there; commit native size when revealed again.
+type NativeResizeFilter = (Changed<Bounds>, Without<CompactParked>);
+
 const LOOP_MAX_TIMEOUT_FRAME_ACTIVE_MS: u32 = 16;
 const LOOP_MAX_TIMEOUT_LOWPOWER_MS: u32 = 2000;
 // Real events (input, IPC, workspace changes, ...) wake the pump immediately
@@ -562,29 +568,6 @@ pub(super) fn retry_front_switch(
     }
 }
 
-/// Upper bound on the timestep fed into [`ease_out_factor`].
-///
-/// When the event loop wakes from an idle sleep (up to 500ms, or 2s in low
-/// power mode), `Time::delta_secs_f64()` reports the entire sleep duration on
-/// the wakeup frame. Feeding that straight into the exponential decay would
-/// consume almost the entire distance on Frame 0 and turn the animation into a
-/// single-frame jump. Cap each frame's step to a 30fps tick (matching the
-/// scroll integrator's `MAX_STEP_SECS`) so the wakeup frame steps smoothly.
-const MAX_ANIMATION_STEP_SECS: f64 = 1.0 / 30.0;
-
-/// Animates window movement.
-/// Fraction of the remaining distance an exponential ease-out consumes in a
-/// frame, given a decay `rate` (per second) and the frame's `delta` in seconds.
-/// Shared by the reposition and resize animators so the two never drift out of step.
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "clamped to [0, 1], well within f32's range; only sub-pixel precision is lost"
-)]
-fn ease_out_factor(rate: f64, delta: f64) -> f32 {
-    let delta = delta.min(MAX_ANIMATION_STEP_SECS);
-    (1.0 - (-rate * delta).exp()).clamp(0.0, 1.0) as f32
-}
-
 /// This is a Bevy system that runs on `Update`. It smoothly moves windows to their target
 /// positions, as indicated by the `RepositionMarker` component.
 /// Animation speed is controlled by the `animation_speed` in the `Config`.
@@ -603,33 +586,27 @@ pub(super) fn animate_entities(
     time: Res<Time>,
     config: Res<Config>,
     mut commands: Commands,
+    mut motion: Local<EntityHashMap<super::motion::Motion>>,
 ) {
-    // Frame-rate-independent exponential smoothing (ease-out).
-    // `animation_speed` is the decay rate (per second); higher = snappier.
-    let t = ease_out_factor(config.animation_speed(), time.delta_secs_f64());
+    motion.retain(|entity, _| animate.get(*entity).is_ok());
 
     animate
         .into_iter()
         .for_each(|(mut position, entity, RepositionMarker(origin))| {
-            let target = origin.as_vec2();
-            let current = position.0.as_vec2();
-            let lerped = current.lerp(target, t);
-
-            // Snap once we're within a pixel of the target (or after one effectively-
-            // complete tick), so the marker is dropped promptly.
-            let finished = (target - lerped).length() <= ANIAMTE_SNAP_THRESHOLD;
-            let new_pos = if finished {
-                *origin
-            } else {
-                lerped.round().as_ivec2()
-            };
+            let (new_pos, finished) = motion.entry(entity).or_default().step(
+                position.0,
+                *origin,
+                config.animation_speed(),
+                time.delta_secs_f64(),
+            );
 
             trace!(
-                "entity {entity} source {} dest {origin} t {t:.3} moving to {new_pos}",
+                "entity {entity} source {} dest {origin} moving to {new_pos}",
                 position.0,
             );
             position.0 = new_pos;
             if finished && let Ok(mut entity_commands) = commands.get_entity(entity) {
+                motion.remove(&entity);
                 entity_commands.try_remove::<RepositionMarker>();
             }
         });
@@ -651,30 +628,27 @@ pub(super) fn animate_resize_entities(
     time: Res<Time>,
     config: Res<Config>,
     mut commands: Commands,
+    mut motion: Local<EntityHashMap<super::motion::Motion>>,
 ) {
-    // Matches animate_entities: exponential ease-out, frame-rate independent.
-    let t = ease_out_factor(config.animation_speed(), time.delta_secs_f64());
+    motion.retain(|entity, _| animate.get(*entity).is_ok());
 
     animate
         .into_iter()
         .for_each(|(mut bounds, entity, ResizeMarker(size))| {
-            let target = size.as_vec2();
-            let current = bounds.0.as_vec2();
-            let lerped = current.lerp(target, t);
-
-            let finished = (target - lerped).length() <= ANIAMTE_SNAP_THRESHOLD;
-            let new_size = if finished {
-                *size
-            } else {
-                lerped.round().as_ivec2()
-            };
+            let (new_size, finished) = motion.entry(entity).or_default().step(
+                bounds.0,
+                *size,
+                config.animation_speed(),
+                time.delta_secs_f64(),
+            );
 
             trace!(
-                "entity {entity} source {} dest {size} t {t:.3} resizing to {new_size}",
+                "entity {entity} source {} dest {size} resizing to {new_size}",
                 bounds.0,
             );
             bounds.0 = new_size;
             if finished && let Ok(mut entity_commands) = commands.get_entity(entity) {
+                motion.remove(&entity);
                 entity_commands.try_remove::<ResizeMarker>();
             }
         });
@@ -801,7 +775,7 @@ pub(super) fn window_resized_update_frame(
             continue;
         };
 
-        let Some((mut window, entity, position, mut bounds, unmanaged, resizing)) = windows
+        let Some((mut window, entity, position, mut bounds, unmanaged, resizing, parked)) = windows
             .iter_mut()
             .find(|window| window.0.id() == *window_id)
         else {
@@ -814,7 +788,7 @@ pub(super) fn window_resized_update_frame(
         // and `animate_resize_entities` is still stepping toward it, so reading
         // the echo in here would fight the animation producing that difference.
         // Only a resize we did not initiate is new information.
-        if resizing {
+        if resizing || parked {
             continue;
         }
         let Ok(new_frame) = window.update_frame() else {
@@ -858,7 +832,7 @@ pub(super) fn window_resized_update_frame(
         let diff = old_frame.min.y - new_frame.min.y;
         if diff.abs() > 0
             && let Some(above_entity) = strip.above(entity)
-            && let Ok((_, _, _, mut above_bounds, _, _)) = windows.get_mut(above_entity)
+            && let Ok((_, _, _, mut above_bounds, _, _, _)) = windows.get_mut(above_entity)
             && above_bounds.0.y - diff > 200
         {
             above_bounds.0.y -= diff;
@@ -876,7 +850,7 @@ pub(crate) fn window_moved_update_frame(
             continue;
         };
 
-        let Some((mut window, mut position, bounds, unmanaged, repositioning)) = windows
+        let Some((mut window, mut position, bounds, unmanaged, repositioning, parked)) = windows
             .iter_mut()
             .find(|window| window.0.id() == *window_id)
         else {
@@ -888,7 +862,7 @@ pub(crate) fn window_moved_update_frame(
         // Our own move, echoed back: `animate_entities` lerps from the current
         // `Position`, so overwriting it with the echoed frame mid-animation
         // restarts each step from behind, and the two chase each other.
-        if repositioning {
+        if repositioning || parked {
             continue;
         }
         let Ok(new_frame) = window.update_frame() else {
@@ -1110,13 +1084,16 @@ pub(super) fn update_overlays(
 
 #[instrument(level = Level::TRACE, skip_all)]
 pub(super) fn commit_window_position(
-    mut moved_windows: Populated<(Entity, &mut Window, &Position), Changed<Position>>,
+    mut moved_windows: Populated<
+        (Entity, &mut Window, &Position, Option<&CompactParked>),
+        Changed<Position>,
+    >,
 ) {
     // AX writes are separate OS operations. Move leading tiles first so a tile
     // cannot temporarily cover a neighbor whose old frame has not moved yet.
     let mut moves = moved_windows
         .iter_mut()
-        .map(|(entity, window, position)| {
+        .map(|(entity, window, position, _)| {
             let delta = position.0 - window.frame().min;
             let (step, coordinate) = if delta.x != 0 {
                 (delta.x, position.0.x)
@@ -1133,8 +1110,28 @@ pub(super) fn commit_window_position(
         .collect::<Vec<_>>();
     moves.sort_unstable_by_key(|(key, _)| *key);
     for (_, entity) in moves {
-        if let Ok((_, mut window, position)) = moved_windows.get_mut(entity) {
-            objc2::rc::autoreleasepool(|_| window.reposition(position.0));
+        if let Ok((_, mut window, position, parked)) = moved_windows.get_mut(entity) {
+            objc2::rc::autoreleasepool(|_| {
+                if let Some(parking) = parked {
+                    // Fit the native presentation before changing displays. Otherwise
+                    // AppKit can resize and move a tall window to the neighbor's top
+                    // edge for a frame. Logical Bounds are intentionally untouched.
+                    let size = window.frame().size().min(parking.size_limit);
+                    if size != window.frame().size() {
+                        window.resize(size);
+                    }
+                }
+                window.reposition(position.0);
+                if parked.is_some() {
+                    match window.update_frame() {
+                        Ok(actual) => debug!(window_id = window.id(), requested = ?position.0,
+                            ?actual, "compact parking readback"),
+                        Err(error) => {
+                            warn!(window_id = window.id(), %error, "parking readback failed");
+                        }
+                    }
+                }
+            });
         }
     }
 }
@@ -1167,7 +1164,7 @@ pub(super) fn verify_window_position(
 /// Release space before neighbors move into it. Growth is committed after positions.
 #[instrument(level = Level::TRACE, skip_all)]
 pub(super) fn commit_window_shrink(
-    mut resized_windows: Populated<(&mut Window, &Bounds), Changed<Bounds>>,
+    mut resized_windows: Populated<(&mut Window, &Bounds), NativeResizeFilter>,
 ) {
     resized_windows
         .par_iter_mut()
@@ -1182,7 +1179,7 @@ pub(super) fn commit_window_shrink(
 #[instrument(level = Level::TRACE, skip_all)]
 pub(super) fn commit_window_size(
     active_display: ActiveDisplay,
-    mut resized_windows: Populated<(&mut Window, &Bounds, &mut WidthRatio), Changed<Bounds>>,
+    mut resized_windows: Populated<(&mut Window, &Bounds, &mut WidthRatio), NativeResizeFilter>,
 ) {
     let display_bounds = active_display.bounds();
     resized_windows

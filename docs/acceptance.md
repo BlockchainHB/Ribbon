@@ -9,10 +9,13 @@ An installable .app with a SwiftUI settings window, menu bar controls, a bundled
 Rust engine, an included disposable test-window app, keyboard navigation,
 modifier scrolling, width presets, stacks and safe pause/quit behavior.
 
-The app starts stopped. Demo scope only manages the fixture app. Selected-app
-scope is explicit and persisted. It must never silently expand to all apps.
-Missing or invalid scope fails closed inside the engine. The app's own windows,
-System Settings and other excluded applications remain outside the engine.
+The app starts stopped. When enabled, it manages normal open applications,
+including newly launched apps, with optional exclusions in Excluded Apps.
+The engine enforces the policy, including recovery. Legacy selected-app policies
+remain restricted when read directly by the engine; the native app migrates old
+settings to the automatic policy. Missing or invalid engine scope fails closed.
+QA always supplies an explicit fixture-only allowlist. Ribbon, System Settings
+and excluded applications remain outside management.
 
 Pause asks the engine to quit gracefully, waits for completion and restores the
 saved pre-session frames of the scoped windows where AX accepts the request.
@@ -50,7 +53,9 @@ change system gestures, stop existing managers or grant OS permissions.
 
 ## Later scope
 
-Commercial licensing, payments, auto-updates, launch at login, pinning, a complete
-shortcut recorder and a claim of ChainYourMac feature parity are outside the
-first beta. Developer ID signing/notarization requires the chosen distribution
+Commercial licensing, payments, auto-updates, launch at login, pinning and a
+claim of ChainYourMac feature parity are outside the beta. Shortcut customization
+was added to the local beta: every exposed global action supports recording,
+alternate assignments, disabling and reset, with the engine retaining global
+input ownership. Developer ID signing/notarization requires the chosen distribution
 identity; local ad-hoc signing is acceptable for this build.

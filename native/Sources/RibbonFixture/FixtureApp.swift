@@ -8,6 +8,7 @@ final class FixtureDelegate: NSObject, NSApplicationDelegate {
   private var timer: Timer?
   private var observer: NSObjectProtocol?
   private var focusObserver: NSObjectProtocol?
+  private var resizeObserver: NSObjectProtocol?
   private var motionObserver: NSObjectProtocol?
   private var motionTimer: Timer?
   private var motionSamples: [[String: Any]] = []
@@ -40,6 +41,21 @@ final class FixtureDelegate: NSObject, NSApplicationDelegate {
         else { return }
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+        self.writeReport()
+      }
+    }
+    resizeObserver = DistributedNotificationCenter.default().addObserver(
+      forName: NSNotification.Name("dev.ribbon.fixture.resize-window"), object: nil, queue: .main
+    ) { [weak self] notification in
+      let id = notification.userInfo?["id"] as? Int
+      let width = notification.userInfo?["width"] as? Double
+      Task { @MainActor in
+        guard let self, !self.sentinel, let width, (260...2000).contains(width),
+          let window = self.windows.first(where: { $0.windowNumber == id })
+        else { return }
+        var frame = window.frame
+        frame.size.width = width
+        window.setFrame(frame, display: true)
         self.writeReport()
       }
     }
@@ -83,7 +99,18 @@ final class FixtureDelegate: NSObject, NSApplicationDelegate {
   private func addWindow() {
     let number = windows.count + 1
     let screens = NSScreen.screens
-    let screenIndex = dualDisplays ? min((number - 1) / 4, screens.count - 1) : 0
+    let requestedDisplay: UInt32? = {
+      guard let index = CommandLine.arguments.firstIndex(of: "--display"),
+        CommandLine.arguments.indices.contains(index + 1)
+      else { return nil }
+      return UInt32(CommandLine.arguments[index + 1])
+    }()
+    let requestedIndex = screens.firstIndex { screen in
+      (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
+        == requestedDisplay
+    }
+    let screenIndex =
+      requestedIndex ?? (dualDisplays ? min((number - 1) / 4, screens.count - 1) : 0)
     let bounds = screens[screenIndex].visibleFrame
     let offset = dualDisplays ? (number - 1) % 4 : number - 1
     let initialContent = NSRect(
@@ -155,7 +182,7 @@ private struct FixtureView: View {
       Text(
         sentinel
           ? "This test window must stay in its original position."
-          : "A real, disposable Mac window.\nUse Control–Option + arrows to navigate."
+          : "A real, disposable Mac window.\nUse your Ribbon shortcuts to navigate."
       )
       .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
       Divider()

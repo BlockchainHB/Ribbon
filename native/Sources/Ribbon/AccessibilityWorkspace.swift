@@ -12,6 +12,14 @@ struct ApplicationIdentity: Sendable {
   let launchTime: Double
 
   @MainActor
+  static var runningBundleIDs: Set<String> {
+    Set(
+      NSWorkspace.shared.runningApplications.compactMap {
+        $0.activationPolicy == .regular ? $0.bundleIdentifier : nil
+      })
+  }
+
+  @MainActor
   static func running(in bundles: Set<String>) -> [Self] {
     NSWorkspace.shared.runningApplications.compactMap { app in
       guard let bundle = app.bundleIdentifier, bundles.contains(bundle), let launch = app.launchDate
@@ -28,11 +36,14 @@ struct RecoveryResult: Sendable {
 }
 
 enum AccessibilityWorkspace {
-  static func snapshot(_ applications: [ApplicationIdentity]) async throws -> [SavedWindow] {
+  static func snapshot(
+    _ applications: [ApplicationIdentity], strict: Bool = true
+  ) async throws -> [SavedWindow] {
     try await Task.detached(priority: .userInitiated) {
       try applications.flatMap { app -> [SavedWindow] in
         guard let current = windows(for: app.pid) else {
-          throw WorkspaceError.unreadableApplication
+          if strict { throw WorkspaceError.unreadableApplication }
+          return []
         }
         return current.compactMap { window -> SavedWindow? in
           guard restorable(window) else { return nil }
@@ -59,7 +70,7 @@ enum AccessibilityWorkspace {
           $0.belongs(toPID: app.pid, bundle: app.bundleID, launchedAt: app.launchTime)
         }
         guard let current = windows(for: app.pid) else {
-          failed += max(records.count, 1)
+          failed += records.count
           continue
         }
         for window in current where restorable(window) {

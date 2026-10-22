@@ -21,6 +21,8 @@ extension DesktopVerification {
       let state = try JSONDecoder().decode(EngineState.self, from: await controller.query())
       let ordered = state.windows.filter { $0.displayID == group[0].screenID }
       try require(ordered.count == 4, "Selected monitor retains four columns")
+      try await verifyParking(
+        controller, fixture: fixture, displayID: group[0].screenID, report: &report)
       await controller.send(.first)
       try await waitForFocus(UInt32(ordered[0].windowID), fixture: fixture, controller: controller)
       let before = try await settledFrames(fixture)
@@ -32,7 +34,8 @@ extension DesktopVerification {
       try require(
         before.first(where: \.focused)?.id != navigated.first(where: \.focused)?.id,
         "Navigation changes focus on the selected monitor")
-      let other = before.filter { $0.screenID != group[0].screenID }
+      let otherIDs = Set(state.windows.filter { $0.displayID != group[0].screenID }.map(\.windowID))
+      let other = before.filter { otherIDs.contains(Int32($0.id)) }
       try require(
         other.allSatisfy { old in navigated.contains { $0.id == old.id && $0.matches(old) } },
         "Navigation on one monitor leaves the other strip unchanged")
@@ -47,7 +50,7 @@ extension DesktopVerification {
         abs(focused.width - (screen.visibleFrame.width - Double(controller.settings.gap * 2))) < 4,
         "Full-width uses the selected monitor's usable width")
       try require(
-        abs(focused.height - (screen.visibleFrame.height - Double(controller.settings.gap * 2)))
+        abs(focused.height - screen.visibleFrame.height)
           < 4,
         "Focused column uses its own monitor's usable height")
       try await focusFixture(group.last!.id, fixture: fixture, controller: controller)
@@ -75,12 +78,14 @@ extension DesktopVerification {
         )
       })
     let targetID = groups.keys.first { $0 != source.screenID }!
-    for _ in 0..<3 {
+    report.frames["beforeTransfer"] = beforeMove
+    for round in 0..<3 {
       await controller.send(.nextDisplay)
       try await eventually("Window transferred to the second monitor") {
         try frames(fixture).contains { $0.id == source.id && $0.screenID == targetID && $0.focused }
       }
       let transferred = try await settledFrames(fixture)
+      report.frames["transferred-\(round)"] = transferred
       let moved = transferred.first { $0.id == source.id }!
       let expectedWidth =
         (moving.width + padding) / screenWidths[source.screenID]! * screenWidths[targetID]!
@@ -99,6 +104,7 @@ extension DesktopVerification {
         }
       }
       let returned = try await settledFrames(fixture)
+      report.frames["returned-\(round)"] = returned
       try require(
         abs(returned.first { $0.id == source.id }!.width - moving.width) < 4,
         "Round-trip display transfer preserves width")
@@ -171,13 +177,16 @@ extension DesktopVerification {
     _ controller: SessionController, fixture: URL, expected: [FixtureFrame]
   ) async throws {
     let actual = try frames(fixture)
-    let state = try JSONDecoder().decode(EngineState.self, from: await controller.query())
+    let stateData = try await controller.query()
+    try stateData.write(
+      to: fixture.deletingLastPathComponent().appendingPathComponent("ownership-state.json"))
+    let state = try JSONDecoder().decode(EngineState.self, from: stateData)
     try require(
       expected.allSatisfy { old in
-        actual.contains { $0.id == old.id && $0.screenID == old.screenID }
+        actual.contains { $0.id == old.id }
           && state.windows.contains {
             $0.windowID == Int32(old.id) && $0.displayID == old.screenID && !$0.floating
           }
-      }, "Every window retains its original display without an explicit transfer")
+      }, "Every tile retains its logical display without an explicit transfer")
   }
 }

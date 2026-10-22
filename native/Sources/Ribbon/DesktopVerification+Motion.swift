@@ -12,16 +12,60 @@ extension DesktopVerification {
     let movingSamples: Int
     let minimumGap: Double
     let settledGap: Double
+    let neighborSpillSamples: Int
   }
 
   /// Samples the fixture's own NSWindows during animation, separately from settled checks.
   static func verifyMotion(
     _ controller: SessionController, fixture: URL, report: inout Report
   ) async throws {
+    // Closing the launcher fixture can leave macOS with no key window. Acquire
+    // an owned window before issuing strip commands rather than assuming focus.
+    if try !frames(fixture).contains(where: \.focused), let target = try frames(fixture).first {
+      DistributedNotificationCenter.default().postNotificationName(
+        NSNotification.Name("dev.ribbon.fixture.focus-window"), object: nil,
+        userInfo: ["id": Int(target.id)], deliverImmediately: true)
+      try await eventually("Motion fixture receives native focus") {
+        try frames(fixture).contains(where: \.focused)
+      }
+    }
     await controller.send(.first)
     _ = try await settledFrames(fixture)
     let initial = try frames(fixture)
-    let displayID = initial.first(where: \.focused)!.screenID
+    guard let displayID = initial.first(where: \.focused)?.screenID else {
+      throw VerificationError.failed("Motion fixture has no focused native window")
+    }
+    if let first = initial.first(where: \.focused) {
+      let cursor = CGEvent(
+        mouseEventSource: nil, mouseType: .mouseMoved,
+        mouseCursorPosition: CGPoint(x: first.x + 100, y: first.y + 100), mouseButton: .left)
+      cursor?.flags = []
+      cursor?.post(tap: .cghidEventTap)
+      for _ in 0..<8 {
+        let scroll = CGEvent(
+          scrollWheelEvent2Source: nil, units: .line, wheelCount: 2,
+          wheel1: 0, wheel2: 1, wheel3: 0)
+        scroll?.flags = CGEventFlags(
+          rawValue: CGEventFlags.maskControl.rawValue | CGEventFlags.maskAlternate.rawValue | 0x21)
+        scroll?.post(tap: .cghidEventTap)
+        try await Task.sleep(for: .milliseconds(20))
+      }
+      try await eventually("Native modifier-scroll moves the fixture strip") {
+        try frames(fixture).contains { $0.id == first.id && abs($0.x - first.x) > 10 }
+      }
+      report.checks.append(
+        Check(name: "native modifier-scroll input moves the strip", passed: true))
+      await controller.send(.first)
+      _ = try await settledFrames(fixture)
+    }
+    let ownership = try JSONDecoder().decode(EngineState.self, from: await controller.query())
+    let owners = Dictionary(
+      uniqueKeysWithValues: ownership.windows.compactMap { tile -> (UInt32, UInt32)? in
+        guard let id = UInt32(exactly: tile.windowID), let display = tile.displayID else {
+          return nil
+        }
+        return (id, display)
+      })
     let directory = fixture.deletingLastPathComponent()
     let capture = directory.appendingPathComponent("motion-frames.json")
     try? FileManager.default.removeItem(at: capture)
@@ -32,6 +76,19 @@ extension DesktopVerification {
       await controller.send(command)
       _ = try await settledFrames(fixture)
     }
+    // Retarget before each transition finishes, including width changes and
+    // reversals. These are actual engine commands against disposable windows.
+    for command: EngineCommand in [.right, .right, .first, .width, .width, .fullWidth, .first] {
+      await controller.send(command)
+      try await Task.sleep(for: .milliseconds(65))
+    }
+    _ = try await settledFrames(fixture)
+    // Restore the full-width stress target so the final gap measurement has
+    // two actual visible neighbors rather than an undefined single-tile gap.
+    await controller.send(.fullWidth)
+    _ = try await settledFrames(fixture)
+    report.checks.append(
+      Check(name: "interrupted native movement and resizing settle", passed: true))
     DistributedNotificationCenter.default().postNotificationName(
       NSNotification.Name("dev.ribbon.fixture.motion"), object: "end", deliverImmediately: true)
     try await eventually("Motion frames recorded") {
@@ -52,7 +109,24 @@ extension DesktopVerification {
       width: screen.visibleFrame.width, height: screen.visibleFrame.height)
     var minimumGap = Double.infinity
     var movingSamples = 0
+    var neighborSpillSamples = 0
     for (index, sample) in samples.enumerated() {
+      let spills = sample.frames.contains { frame in
+        guard let owner = owners[frame.id] else { return false }
+        let rect = CGRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height)
+        return NSScreen.screens.contains { other in
+          let id = (other.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?
+            .uint32Value
+          guard id != owner else { return false }
+          let bounds = CGRect(
+            x: other.frame.minX, y: top - other.frame.maxY, width: other.frame.width,
+            height: other.frame.height)
+          let overlap = rect.intersection(bounds)
+          return !overlap.isNull && (overlap.width > 1.1 || overlap.height > 33)
+        }
+      }
+      if spills { neighborSpillSamples += 1 }
+
       if index > 0
         && sample.frames.contains(where: { frame in
           samples[index - 1].frames.contains { old in
@@ -73,7 +147,10 @@ extension DesktopVerification {
     report.motion.append(
       MotionObservation(
         displayID: displayID, samples: samples.count, movingSamples: movingSamples,
-        minimumGap: minimumGap, settledGap: settledGap))
+        minimumGap: minimumGap, settledGap: settledGap, neighborSpillSamples: neighborSpillSamples))
+    try require(
+      neighborSpillSamples == 0,
+      "Window body flashed on a neighboring monitor in \(neighborSpillSamples) motion samples")
     try require(minimumGap >= 0, "Moving tiles overlap by \(-minimumGap) points")
     try require(
       abs(settledGap - Double(controller.settings.windowPadding * 2)) <= 1,

@@ -2,7 +2,6 @@ import AppKit
 import ApplicationServices
 import RibbonCore
 import SwiftUI
-import UniformTypeIdentifiers
 
 @main
 @MainActor
@@ -24,6 +23,7 @@ enum RibbonEntry {
       child.environment = ProcessInfo.processInfo.environment.merging([
         "RIBBON_PARENT_PID": String(getpid()),
         "RIBBON_MANAGED_APPS": "dev.ribbon.watchdog-probe",
+        "RIBBON_MANAGEMENT_SCOPE": "selected", "RIBBON_EXCLUDED_APPS": "",
         "PANERU_MACH_SERVICE": "dev.ribbon.watchdog.\(getpid())",
         "RUST_LOG": "error",
       ]) { _, new in new }
@@ -55,6 +55,13 @@ enum RibbonEntry {
       } catch { exit(1) }
       return
     }
+    if CommandLine.arguments.contains("--ui-qa-output"),
+      let index = CommandLine.arguments.firstIndex(of: "--ui-qa-appearance"),
+      CommandLine.arguments.indices.contains(index + 1)
+    {
+      NSApplication.shared.appearance = NSAppearance(
+        named: CommandLine.arguments[index + 1] == "light" ? .aqua : .darkAqua)
+    }
     RibbonApp.main()
   }
 }
@@ -66,25 +73,41 @@ struct RibbonApp: App {
 
   var body: some Scene {
     Window("Ribbon", id: "main") {
-      ControlPanel(controller: controller)
+      RibbonSettingsWindow(controller: controller, delegate: delegate)
         .task {
           await controller.refreshPermission()
           if CommandLine.arguments.contains("--qa-output") {
-            await DesktopVerification.run(controller)
+            await DesktopVerification.run(controller, statusMenu: delegate.statusMenu)
           }
         }
     }
-    .defaultSize(width: 760, height: 760)
-    .windowResizability(.contentSize)
-
-    MenuBarExtra("Ribbon", systemImage: "rectangle.split.3x1") {
-      RibbonMenu(controller: controller)
+    .defaultSize(width: 800, height: 560)
+    .windowResizability(.contentMinSize)
+    .commands {
+      CommandGroup(replacing: .appSettings) { SettingsMenuCommand() }
+      CommandGroup(replacing: .appInfo) {
+        Button("About Ribbon") { showRibbonAbout() }
+      }
     }
   }
 }
 
 @MainActor
 final class RibbonDelegate: NSObject, NSApplicationDelegate {
+  private(set) var statusMenu: RibbonStatusMenu?
+  private var overview: OverviewController?
+  var openSettings: () -> Void = {}
+
+  func applicationDidFinishLaunching(_ notification: Notification) {
+    let overview = OverviewController(session: .shared)
+    self.overview = overview
+    let menu = RibbonStatusMenu(
+      controller: .shared, openOverview: { overview.toggle() },
+      openSettings: { [weak self] in self?.openSettings() })
+    menu.install()
+    statusMenu = menu
+  }
+
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     let controller = SessionController.shared
     Task {
@@ -103,277 +126,43 @@ final class RibbonDelegate: NSObject, NSApplicationDelegate {
   }
 }
 
-private struct RibbonMenu: View {
+private struct RibbonSettingsWindow: View {
   @ObservedObject var controller: SessionController
+  let delegate: RibbonDelegate
   @Environment(\.openWindow) private var openWindow
   var body: some View {
-    Text("Ribbon · \(controller.phase.rawValue)")
-    Button(controller.phase == .running ? "Pause & restore windows" : "Start Ribbon") {
-      Task {
-        if controller.phase == .running {
-          await controller.pause()
-        } else {
-          await controller.start()
-        }
+    SettingsRoot(controller: controller).onAppear {
+      let action = openWindow
+      delegate.openSettings = {
+        action(id: "main")
+        NSApp.activate(ignoringOtherApps: true)
       }
-    }.disabled(controller.phase.busy)
-    Button("Open Ribbon") {
-      openWindow(id: "main")
-      NSApp.activate(ignoringOtherApps: true)
     }
-    Button("Move window to next display") {
-      Task { await controller.send(.nextDisplay) }
-    }.disabled(controller.phase != .running || NSScreen.screens.count < 2)
-    Divider()
-    Button("Quit Ribbon") { NSApp.terminate(nil) }.keyboardShortcut("q")
   }
 }
 
-struct ControlPanel: View {
-  @ObservedObject var controller: SessionController
-  @State private var openingDemo = false
-  private let tint = Color(red: 0.19, green: 0.42, blue: 0.34)
-
+private struct SettingsMenuCommand: View {
+  @Environment(\.openWindow) private var openWindow
   var body: some View {
-    VStack(alignment: .leading, spacing: 22) {
-      header
-      if let notice = controller.notice {
-        Label(notice, systemImage: "info.circle")
-          .font(.callout).foregroundStyle(.secondary)
-          .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-          .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
-      }
-      if !controller.permissionGranted { permissions }
-      if controller.recoveryPending && controller.phase == .stopped {
-        HStack {
-          Label("A previous session can be restored.", systemImage: "arrow.uturn.backward")
-          Spacer()
-          Button("Restore windows") { Task { await controller.restorePreviousSession() } }
-        }.font(.callout).padding(14).background(
-          .orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
-      }
-      scope
-      appearance
-      shortcuts
-      HStack {
-        Text("Local beta · Powered by Paneru")
-          .font(.caption).foregroundStyle(.secondary)
-        Spacer()
-        Button("About & source") {
-          let url = Bundle.main.resourceURL!.appendingPathComponent("README.html")
-          NSWorkspace.shared.open(url)
-        }.buttonStyle(.link).font(.caption)
-      }
-    }
-    .padding(28).frame(width: 760)
-    .tint(tint)
-    .onChange(of: controller.settings) { _, _ in controller.saveSettings() }
+    Button("Settings…") {
+      openWindow(id: "main")
+      NSApp.activate(ignoringOtherApps: true)
+    }.keyboardShortcut(",", modifiers: .command)
   }
+}
 
-  private var header: some View {
-    HStack(spacing: 16) {
-      Image(systemName: "rectangle.split.3x1")
-        .font(.system(size: 28, weight: .medium))
-        .foregroundStyle(tint).frame(width: 58, height: 58)
-        .background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 15))
-      VStack(alignment: .leading, spacing: 4) {
-        Text("Ribbon").font(.system(size: 30, weight: .semibold))
-        Text("Room for every window.").foregroundStyle(.secondary)
-      }
-      Spacer()
-      VStack(alignment: .trailing, spacing: 8) {
-        Label(
-          controller.phase.rawValue,
-          systemImage: controller.phase == .running ? "circle.fill" : "pause.circle"
-        )
-        .font(.caption.weight(.medium)).foregroundStyle(
-          controller.phase == .running ? tint : .secondary)
-        Button(controller.phase == .running ? "Pause & restore" : "Start Ribbon") {
-          Task {
-            if controller.phase == .running {
-              await controller.pause()
-            } else {
-              await controller.start()
-            }
-          }
-        }
-        .buttonStyle(.borderedProminent)
-        .disabled(
-          controller.phase.busy || !controller.permissionGranted
-            || controller.recoveryPending && controller.phase != .running)
-      }
-    }
+@MainActor
+func showRibbonAbout() {
+  let credits = NSMutableAttributedString()
+  for (label, file) in [
+    ("Acknowledgments", "README.html"), ("Open-Source Licenses", "DependencyLicenses.txt"),
+  ] {
+    guard let url = Bundle.main.resourceURL?.appendingPathComponent(file) else { continue }
+    if credits.length > 0 { credits.append(NSAttributedString(string: "\n")) }
+    credits.append(NSAttributedString(string: label, attributes: [.link: url]))
   }
-
-  private var permissions: some View {
-    GroupBox {
-      HStack(alignment: .top, spacing: 14) {
-        Image(systemName: "hand.raised").font(.title2).foregroundStyle(tint)
-        VStack(alignment: .leading, spacing: 8) {
-          Text("Allow Ribbon to arrange windows").font(.headline)
-          Text(
-            "Enable Ribbon in System Settings → Privacy & Security → Accessibility. Ribbon runs locally and starts paused."
-          )
-          .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-          HStack {
-            Button("Open Accessibility Settings") { controller.openPermissionSettings() }
-            Button("Check access") { Task { await controller.refreshPermission() } }
-          }
-        }
-        Spacer(minLength: 0)
-      }.padding(10)
-    }
-  }
-
-  private var scope: some View {
-    GroupBox {
-      VStack(alignment: .leading, spacing: 14) {
-        HStack {
-          Text("Managed applications").font(.headline)
-          Spacer()
-          Picker("Scope", selection: $controller.settings.scope) {
-            Text("Demo windows").tag(ManagementScope.demo)
-            Text("Selected apps").tag(ManagementScope.selected)
-          }.pickerStyle(.segmented).frame(width: 270).labelsHidden()
-            .disabled(controller.phase != .stopped)
-        }
-        if controller.settings.scope == .demo {
-          HStack {
-            VStack(alignment: .leading, spacing: 4) {
-              Text("Try it with disposable windows")
-              Text("Your other applications stay in place.").font(.callout).foregroundStyle(
-                .secondary)
-            }
-            Spacer()
-            Button("Open demo windows") {
-              openingDemo = true
-              Task {
-                defer { openingDemo = false }
-                do { try await controller.openDemo() } catch {
-                  controller.notice = error.localizedDescription
-                }
-              }
-            }.disabled(openingDemo || controller.phase.busy)
-          }
-        } else {
-          ScrollView {
-            VStack(spacing: 10) {
-              ForEach(controller.apps) { app in
-                Toggle(isOn: selection(app.id)) {
-                  HStack {
-                    if let icon = app.icon {
-                      Image(nsImage: icon).resizable().frame(width: 22, height: 22)
-                    }
-                    Text(app.name)
-                    Spacer()
-                  }
-                }
-              }
-              ForEach(
-                controller.settings.selectedBundleIDs.subtracting(Set(controller.apps.map(\.id)))
-                  .sorted(), id: \.self
-              ) { id in
-                Toggle(id, isOn: selection(id)).font(.callout)
-              }
-            }.padding(2)
-          }.frame(maxHeight: 145).disabled(controller.phase != .stopped)
-          HStack {
-            Button("Refresh apps") { controller.refreshApps() }
-            Button("Add app…") { addApplication() }
-            Spacer()
-            Text("\(controller.settings.managedBundleIDs.count) selected")
-              .font(.caption).foregroundStyle(.secondary)
-          }.disabled(controller.phase != .stopped)
-          Text("Pause Ribbon before changing which apps it manages.")
-            .font(.caption).foregroundStyle(.secondary)
-        }
-      }.padding(10)
-    }
-  }
-
-  private func selection(_ id: String) -> Binding<Bool> {
-    Binding(
-      get: { controller.settings.selectedBundleIDs.contains(id) },
-      set: { enabled in
-        if enabled {
-          controller.settings.selectedBundleIDs.insert(id)
-        } else {
-          controller.settings.selectedBundleIDs.remove(id)
-        }
-      })
-  }
-
-  private func addApplication() {
-    let panel = NSOpenPanel()
-    panel.allowedContentTypes = [.application]
-    panel.directoryURL = URL(fileURLWithPath: "/Applications")
-    panel.canChooseDirectories = false
-    panel.allowsMultipleSelection = false
-    guard panel.runModal() == .OK, let url = panel.url, let id = Bundle(url: url)?.bundleIdentifier,
-      RibbonSettings.validBundleID(id), id != RibbonSettings.appBundleID
-    else { return }
-    controller.settings.selectedBundleIDs.insert(id)
-  }
-
-  private var appearance: some View {
-    GroupBox {
-      VStack(alignment: .leading, spacing: 14) {
-        Text("Layout & motion").font(.headline)
-        HStack {
-          Text("Window spacing").frame(width: 130, alignment: .leading)
-          Slider(
-            value: Binding(
-              get: { Double(controller.settings.gap) },
-              set: { controller.settings.gap = Int($0) }), in: 0...40, step: 2)
-          Text("\(controller.settings.gap) pt").monospacedDigit().frame(
-            width: 48, alignment: .trailing)
-        }
-        Toggle("Keep the focused column centered", isOn: $controller.settings.centerFocused)
-        HStack {
-          Text("Trackpad swipe").frame(width: 130, alignment: .leading)
-          Picker("Trackpad swipe", selection: $controller.settings.gestureFingers) {
-            Text("Modifier scroll only").tag(0)
-            Text("3 fingers").tag(3)
-            Text("4 fingers").tag(4)
-          }.labelsHidden()
-        }
-        Text(
-          "Control–Option + horizontal scroll always works. Multi-finger swipes must use a gesture that macOS isn’t also using for Spaces."
-        )
-        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-      }.padding(10).disabled(controller.phase.busy)
-    }
-  }
-
-  private var shortcuts: some View {
-    GroupBox {
-      VStack(alignment: .leading, spacing: 12) {
-        Text("Move through your strip").font(.headline)
-        HStack(spacing: 24) {
-          shortcut("Focus", "⌃⌥ ← →")
-          shortcut("Width", "⌃⌥ R")
-          shortcut("Center", "⌃⌥ C")
-          shortcut("Stack", "⌃⌥ ]")
-          shortcut("Pause", "⌃⌥ Q")
-        }
-        Text(
-          "Add Shift to the arrows to reorder. Control–Option–Shift–] pulls a window out of a stack."
-        )
-        .font(.caption).foregroundStyle(.secondary)
-        Label(
-          "Each display has its own strip. Control–Option–N moves a window to the next display and keeps its width proportion.",
-          systemImage: "display.2"
-        )
-        .font(.caption).foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
-      }.padding(10).frame(maxWidth: .infinity, alignment: .leading)
-    }
-  }
-
-  private func shortcut(_ title: String, _ keys: String) -> some View {
-    VStack(alignment: .leading, spacing: 5) {
-      Text(title).font(.caption).foregroundStyle(.secondary)
-      Text(keys).font(.system(.callout, design: .monospaced).weight(.medium))
-    }
-  }
+  NSApp.orderFrontStandardAboutPanel(options: [
+    .applicationIcon: RibbonBrand.applicationIcon, .credits: credits,
+  ])
+  NSApp.activate(ignoringOtherApps: true)
 }

@@ -513,6 +513,7 @@ impl QueryStateParams<'_, '_> {
                     .and_then(|id| tiled.iter().position(|window| window.id == id))
                     .unwrap_or(0);
                 columns.push(ColumnSet {
+                    pair_id: column.top().and_then(|e| strip.pair_id(e)),
                     kind: column_kind(column),
                     width_ratio,
                     selected,
@@ -539,7 +540,8 @@ impl QueryStateParams<'_, '_> {
                 .push(WorkspaceSet {
                     number: strip.virtual_index + 1,
                     native_id: strip.id(),
-                    active: active_workspace,
+                    active: active_workspace
+                        || selected_workspace && active_workspace_id != Some(strip.id()),
                     columns: std::sync::Arc::new(columns),
                     floating: std::sync::Arc::new(floating),
                 });
@@ -589,7 +591,7 @@ impl QueryStateParams<'_, '_> {
         let hidden = matches!(unmanaged, Some(Unmanaged::Minimized | Unmanaged::Hidden));
         let visible = frame
             .and_then(|frame| window_visibility(frame, &self.displays, sliver_width))
-            .is_some_and(|(_, visible)| visible && !hidden);
+            .is_some_and(|(_, visible)| visible && !hidden && !self.windows.is_parked(entity));
 
         Some(crate::types::windowset::WindowRec {
             id: window.id(),
@@ -706,9 +708,11 @@ impl QueryState for PaneruQueryState {
                     // their last known frame says.
                     let hidden =
                         matches!(unmanaged, Some(Unmanaged::Minimized | Unmanaged::Hidden));
+                    let parked = windows.is_parked(entity);
+                    let owner_display = displays.get(child.parent()).ok().map(|(d, _, _)| d.id());
                     let visibility = frame
                         .and_then(|frame| window_visibility(frame, displays, sliver_width))
-                        .map(|(display_id, visible)| (display_id, visible && !hidden));
+                        .map(|(display_id, visible)| (display_id, visible && !hidden && !parked));
                     Some(PaneruWindowState {
                         window_id: window.id(),
                         bundle_id,
@@ -718,7 +722,11 @@ impl QueryState for PaneruQueryState {
                         subrole: window.subrole().ok(),
                         focused: focused_entity == Some(entity),
                         floating: matches!(unmanaged, Some(Unmanaged::Floating)),
-                        display_id: visibility.map(|(display_id, _)| display_id),
+                        display_id: if config.compact_parking() && strip.contains(entity) {
+                            owner_display
+                        } else {
+                            visibility.map(|(display_id, _)| display_id)
+                        },
                         frame: frame.map(|frame| Frame {
                             x: frame.min.x,
                             y: frame.min.y,

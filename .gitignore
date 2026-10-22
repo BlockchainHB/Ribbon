@@ -6,3 +6,12 @@ native/.build/
 __pycache__/
 *.pyc
 *.xcuserstate
+.env
+.env.*
+!.env.example
+*.p12
+*.p8
+*.mobileprovision
+# Local design studies and receipts are not release source.
+/research/
+/branding/

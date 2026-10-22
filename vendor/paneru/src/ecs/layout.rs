@@ -23,10 +23,14 @@ use crate::ecs::{
 use crate::errors::{Error, Result};
 use crate::manager::{Display, Origin, Size, Window};
 use crate::platform::WorkspaceId;
-use crate::util::round_px;
 
-mod parking;
-use parking::{AdjacentDisplayParked, anchored_parking, horizontal_parking};
+pub(crate) mod pairing;
+pub(crate) mod parking;
+pub(crate) mod width_policy;
+use parking::{
+    AdjacentDisplayParked, CompactParked, ParkingDisplay, compact_parking, crosses_display_seam,
+    legacy_parking, update_parking_state,
+};
 
 /// The floor every window in a column is packed against. Heights that would
 /// starve a sibling below it make [`binpack_heights`] fall back to averaging.
@@ -55,6 +59,7 @@ type StripPlacements<'w, 's> = Query<
         Option<Ref<'static, ActiveWorkspaceMarker>>,
         Option<&'static RepositionMarker>,
         Has<PreviousStripPosition>,
+        Has<pairing::ArrangeNeighbors>,
     ),
 >;
 
@@ -112,6 +117,7 @@ type RepositionedWindows<'w, 's> = Populated<
         &'static mut Bounds,
         Option<&'static ResizeMarker>,
         Has<AdjacentDisplayParked>,
+        Has<CompactParked>,
     ),
     (With<Window>, Without<LayoutStrip>),
 >;
@@ -202,8 +208,11 @@ impl Plugin for LayoutEventsPlugin {
                 // Wait for finish_setup before tiling: until then every window
                 // sits in the active strip regardless of its real display.
                 (
+                    apply_pair_fits,
+                    width_policy::apply_width_policy,
                     layout_sizes_changed,
                     layout_strip_changed,
+                    position_arranged_neighbors,
                     reshuffle_layout_strip,
                     ensure_visible_in_strip,
                 )
@@ -396,6 +405,7 @@ pub struct LayoutStrip {
     id: WorkspaceId,
     pub virtual_index: u32,
     columns: VecDeque<Column>,
+    pairs: Vec<pairing::ColumnPair>,
     /// Entities belonging to a `Column::Stack` currently displayed as tabs (one visible, sharing
     /// the full column rect) instead of split heights. Membership, not a `Column` variant — a Stack
     /// is "tabbed" iff any of its member entities is in this set; the invariant that either all or
@@ -414,6 +424,7 @@ impl LayoutStrip {
             virtual_index,
             columns: VecDeque::new(),
             tabbed_stacks: EntityHashSet::default(),
+            pairs: Vec::new(),
         }
     }
 
@@ -425,6 +436,7 @@ impl LayoutStrip {
             virtual_index: 0,
             columns,
             tabbed_stacks: EntityHashSet::default(),
+            pairs: Vec::new(),
         }
     }
 
@@ -470,6 +482,7 @@ impl LayoutStrip {
     ///   the window is appended to the end.
     /// * `entity` - Entity of the window to insert.
     pub fn insert_at(&mut self, index: usize, entity: Entity) {
+        let index = self.insertion_index(index);
         if index >= self.len() {
             self.columns.push_back(Column::Single(entity));
         } else {
@@ -491,6 +504,8 @@ impl LayoutStrip {
 
     pub(crate) fn append_strip(&mut self, other: &mut Self) {
         self.columns.append(&mut other.columns);
+        self.pairs.append(&mut other.pairs);
+        self.refresh_pairs();
         self.tabbed_stacks.extend(other.tabbed_stacks.drain());
     }
 
@@ -498,6 +513,7 @@ impl LayoutStrip {
     /// preserving column, stack, and tab structure for any column whose members
     /// all move together.
     pub(crate) fn extract_windows_into(&mut self, moved: &EntityHashSet, target: &mut Self) {
+        self.transfer_pairs(moved, target);
         let mut index = 0;
         while index < self.columns.len() {
             let all_moving = self.columns[index]
@@ -541,6 +557,8 @@ impl LayoutStrip {
             }
             index += 1;
         }
+        self.refresh_pairs();
+        target.refresh_pairs();
     }
 
     pub fn append_tab_group(&mut self, entities: &[Entity]) {
@@ -573,7 +591,7 @@ impl LayoutStrip {
             self.remove(*entity);
         }
 
-        let index = index.min(self.len());
+        let index = self.insertion_index(index.min(self.len()));
         if group.len() == 1 {
             self.insert_at(index, group[0]);
         } else if index >= self.len() {
@@ -615,6 +633,7 @@ impl LayoutStrip {
                 self.columns.insert(index, Column::Tabs(tabs));
             }
         }
+        self.refresh_pairs();
         Ok(())
     }
 
@@ -679,6 +698,7 @@ impl LayoutStrip {
                 }
             }
         }
+        self.refresh_pairs();
     }
 
     /// Retrieves the `Panel` at a specified index in the pane.
@@ -706,7 +726,16 @@ impl LayoutStrip {
     ///
     /// * `left` - The index of the first panel.
     /// * `right` - The index of the second panel.
+    #[cfg(any(feature = "lua", test))]
     pub fn swap(&mut self, left: usize, right: usize) {
+        if let (Some(a), Some(b)) = (
+            self.columns.get(left).and_then(Column::top),
+            self.columns.get(right).and_then(Column::top),
+        ) && (self.pair_id(a).is_some() || self.pair_id(b).is_some())
+        {
+            self.reorder(a, b, left < right);
+            return;
+        }
         self.columns.swap(left, right);
     }
 
@@ -778,6 +807,10 @@ impl LayoutStrip {
             return Ok(());
         }
 
+        self.unpair(entity);
+        if let Some(left) = self.columns.get(index - 1).and_then(Column::top) {
+            self.unpair(left);
+        }
         let column_to_stack = self.columns.remove(index).unwrap();
         let items_to_stack = match column_to_stack {
             Column::Fullscren(_) => return Ok(()),
@@ -828,6 +861,7 @@ impl LayoutStrip {
     ///
     /// `Ok(())` if the unstacking is successful or not needed, otherwise `Err(Error)` if the window is not found.
     pub fn unstack(&mut self, entity: Entity) -> Result<()> {
+        self.unpair(entity);
         let index = self.index_of(entity)?;
         let column = self.columns.remove(index).unwrap();
 
@@ -1276,6 +1310,65 @@ pub(super) fn layout_strip_changed(
     }
 }
 
+fn position_arranged_neighbors(
+    strips: Query<(Entity, &LayoutStrip, &ChildOf, &pairing::ArrangeNeighbors)>,
+    displays: DisplayViewports,
+    windows: Windows,
+    config: Res<Config>,
+    mut commands: Commands,
+) {
+    for (entity, strip, parent, pair) in strips {
+        if !windows.is_resizing(pair.0) && !windows.is_resizing(pair.1) {
+            commands
+                .entity(entity)
+                .remove::<pairing::ArrangeNeighbors>();
+        }
+        let Ok((display, dock)) = displays.get(parent.parent()) else {
+            continue;
+        };
+        let viewport = display.actual_display_bounds(dock, &config);
+        let (Some(left), Some(right), Some(frame)) = (
+            windows.layout_position(pair.0),
+            windows.layout_position(pair.1),
+            windows.moving_frame(pair.1),
+        ) else {
+            continue;
+        };
+        if right.0.x + frame.width() - left.0.x > viewport.width() {
+            continue;
+        }
+        commands.reposition_entity(entity, viewport.min - left.0.with_y(0));
+        commands.entity(entity).insert(ManualStripOffset {
+            signature: strip_signature(strip, &windows),
+        });
+    }
+}
+
+fn apply_pair_fits(
+    mut strips: Query<(&mut LayoutStrip, &ChildOf)>,
+    displays: DisplayViewports,
+    windows: Windows,
+    config: Res<Config>,
+    mut commands: Commands,
+) {
+    for (mut strip, parent) in &mut strips {
+        let Ok((display, dock)) = displays.get(parent.parent()) else {
+            continue;
+        };
+        let viewport = display.actual_display_bounds(dock, &config).size();
+        for (entity, size) in strip
+            .bypass_change_detection()
+            .pair_fit_requests(viewport, &|e| windows.moving_frame(e))
+        {
+            commands
+                .entity(entity)
+                .remove::<crate::ecs::FullWidthMarker>();
+            commands.resize_entity(entity, size);
+            commands.reshuffle_around(entity);
+        }
+    }
+}
+
 /// Resolved owning strip and display viewport for a window entity participating
 /// in [`reshuffle_layout_strip`] or [`ensure_visible_in_strip`].
 struct StripScrollContext<'a> {
@@ -1286,6 +1379,39 @@ struct StripScrollContext<'a> {
     display_bounds: IRect,
     raw_display_bounds: IRect,
     is_new_activation: bool,
+    arranging: bool,
+}
+
+impl StripScrollContext<'_> {
+    fn reveal_pair(
+        &self,
+        entity: Entity,
+        height: i32,
+        windows: &Windows,
+        commands: &mut Commands,
+    ) -> bool {
+        let Some(pair) =
+            self.strip
+                .reveal_frame(entity, height, self.display_bounds.width(), &|e| {
+                    windows.moving_frame(e)
+                })
+        else {
+            return false;
+        };
+        let target = origin_exposing(
+            pair.min,
+            pair.size(),
+            self.strip_target,
+            self.display_bounds,
+        );
+        if target != self.strip_target {
+            commands
+                .entity(self.strip_entity)
+                .try_remove::<ManualStripOffset>();
+            commands.reposition_entity(self.strip_entity, target.with_y(self.display_bounds.min.y));
+        }
+        true
+    }
 }
 
 fn resolve_strip_scroll_context<'a>(
@@ -1302,6 +1428,7 @@ fn resolve_strip_scroll_context<'a>(
         active_marker,
         strip_reposition,
         has_previous_position,
+        arranging,
     ) = strips.into_iter().find(|strip| strip.0.contains(entity))?;
     let (display, dock) = displays.get(child.parent()).ok()?;
     let strip_target = strip_reposition.map_or(strip_position.0, |reposition| reposition.0);
@@ -1313,6 +1440,7 @@ fn resolve_strip_scroll_context<'a>(
         display_bounds: display.actual_display_bounds(dock, config),
         raw_display_bounds: display.bounds(),
         is_new_activation: has_previous_position && active_marker.is_some_and(|m| m.is_added()),
+        arranging,
     })
 }
 
@@ -1333,9 +1461,9 @@ pub(super) fn reshuffle_layout_strip(
         let Some(ctx) = resolve_strip_scroll_context(entity, &strips, &displays, &config) else {
             return;
         };
-        if ctx.is_new_activation {
+        if ctx.arranging || ctx.is_new_activation {
             trace!(
-                "reshuffle_layout_strip: skipping newly active workspace {}",
+                "reshuffle_layout_strip: skipping arranged or newly active workspace {}",
                 ctx.strip_entity
             );
             return;
@@ -1343,6 +1471,19 @@ pub(super) fn reshuffle_layout_strip(
         let Some(frame) = windows.moving_frame(entity) else {
             return;
         };
+        if ctx.reveal_pair(entity, frame.height(), &windows, &mut commands) {
+            return;
+        }
+        // Centering one column must not push its neighbors off a fitting strip.
+        if config.fill_available_width()
+            && width_policy::strip_fits(ctx.strip, &windows, ctx.display_bounds.width())
+        {
+            commands
+                .entity(ctx.strip_entity)
+                .try_remove::<ManualStripOffset>();
+            commands.reposition_entity(ctx.strip_entity, ctx.display_bounds.min);
+            return;
+        }
         let size = frame.size();
         // When a window is being resized (`ResizeMarker` present), keep its
         // visual center anchored (`frame.center()`) unless `auto_center` or the
@@ -1477,7 +1618,7 @@ fn ensure_visible_in_strip(
         // before the `&mut Position` query below is touched — Bevy treats
         // the two queries as conflicting system params even though they're
         // never live at the same time here.
-        let Some((strip_entity, strip_target, viewport, is_new_activation)) =
+        let Some((strip_entity, strip_target, viewport, is_new_activation, pair_frame)) =
             resolve_strip_scroll_context(entity, &strip_params.p0(), &displays, &config).map(
                 |ctx| {
                     (
@@ -1485,6 +1626,12 @@ fn ensure_visible_in_strip(
                         ctx.strip_target,
                         ctx.display_bounds,
                         ctx.is_new_activation,
+                        ctx.strip.reveal_frame(
+                            entity,
+                            ctx.display_bounds.height(),
+                            ctx.display_bounds.width(),
+                            &|e| windows.moving_frame(e),
+                        ),
                     )
                 },
             )
@@ -1504,7 +1651,10 @@ fn ensure_visible_in_strip(
         // the strip's current position is on its way somewhere else, so the
         // target offset is what the window's slot will actually be measured
         // against - the same projection `reshuffle_layout_strip` makes.
-        let scroll_to = origin_exposing(layout_position.0, size, strip_target, viewport);
+        let scroll_to = pair_frame.map_or_else(
+            || origin_exposing(layout_position.0, size, strip_target, viewport),
+            |pair| origin_exposing(pair.min, pair.size(), strip_target, viewport),
+        );
         if scroll_to == strip_target {
             continue;
         }
@@ -1666,22 +1816,20 @@ fn window_geometry_changed(windows: GeometryChanges) -> bool {
     !windows.is_empty()
 }
 
-/// Reacts to changes of logical window layout in the strip and any have been changed, reposition
-/// the layout strip against the current display viewport.
-#[instrument(level = Level::DEBUG, skip_all)]
-fn position_layout_windows(
-    positioned_windows: RepositionedWindows,
-    workspaces: StripsForWindowPositioning,
-    snap_guards: Query<&SnapStripMarker>,
-    displays: DisplayViewports,
-    config: Res<Config>,
-    mut commands: Commands,
-) {
-    let offscreen_sliver_width = config.sliver_width();
-    let connected_bounds = displays
-        .iter()
-        .map(|(display, _)| display.bounds())
-        .collect::<Vec<_>>();
+struct PresentationContext {
+    hidden: EntityHashSet,
+    windows: EntityHashMap<StripWindowContext>,
+    frames: EntityHashMap<IRect>,
+}
+
+fn presentation_context(
+    positioned_windows: &RepositionedWindows,
+    workspaces: &StripsForWindowPositioning,
+    snap_guards: &Query<&SnapStripMarker>,
+    displays: &DisplayViewports,
+    config: &Config,
+) -> PresentationContext {
+    let mut hidden_windows = EntityHashSet::default();
     let mut strip_contexts = EntityHashMap::default();
     let mut current_frames = EntityHashMap::default();
     for (
@@ -1692,8 +1840,11 @@ fn position_layout_windows(
         swiping,
         child_of,
         hidden,
-    ) in &workspaces
+    ) in workspaces
     {
+        if hidden {
+            hidden_windows.extend(layout_strip.all_windows());
+        }
         // One animated origin per strip. Member windows follow that same frame;
         // independent easing lets neighbors catch up at different rates and overlap.
         let origin = if hidden || snap_guards.iter().any(|guard| guard.strip == strip_entity) {
@@ -1709,12 +1860,12 @@ fn position_layout_windows(
             child_of.parent(),
         );
         if let Ok((display, dock)) = displays.get(child_of.parent()) {
-            let height = display.actual_display_bounds(dock, &config).height();
+            let height = display.actual_display_bounds(dock, config).height();
             let get_frame = |entity| {
                 positioned_windows
                     .get(entity)
                     .ok()
-                    .map(|(_, _, _, position, bounds, _, _)| {
+                    .map(|(_, _, _, position, bounds, _, _, _)| {
                         IRect::from_corners(position.0, position.0 + bounds.0)
                     })
             };
@@ -1722,8 +1873,55 @@ fn position_layout_windows(
         }
     }
 
-    for (entity, window, _, mut position, mut bounds, resize, was_parked) in positioned_windows {
-        let Some(context) = strip_contexts.get(&entity) else {
+    PresentationContext {
+        hidden: hidden_windows,
+        windows: strip_contexts,
+        frames: current_frames,
+    }
+}
+
+fn collect_parking_displays(displays: &DisplayViewports, config: &Config) -> Vec<ParkingDisplay> {
+    displays
+        .iter()
+        .map(|(display, dock)| ParkingDisplay {
+            bounds: display.bounds(),
+            viewport: {
+                let mut viewport = display.actual_display_bounds(dock, config);
+                viewport.max.y += config.edge_padding().2;
+                viewport
+            },
+        })
+        .collect()
+}
+
+/// Reacts to changes of logical window layout in the strip and any have been changed, reposition
+/// the layout strip against the current display viewport.
+#[instrument(level = Level::DEBUG, skip_all)]
+fn position_layout_windows(
+    positioned_windows: RepositionedWindows,
+    workspaces: StripsForWindowPositioning,
+    snap_guards: Query<&SnapStripMarker>,
+    displays: DisplayViewports,
+    config: Res<Config>,
+    mut commands: Commands,
+) {
+    let parking_displays = collect_parking_displays(&displays, &config);
+    let connected_bounds = parking_displays
+        .iter()
+        .map(|d| d.bounds)
+        .collect::<Vec<_>>();
+    let presentation = presentation_context(
+        &positioned_windows,
+        &workspaces,
+        &snap_guards,
+        &displays,
+        &config,
+    );
+
+    for (entity, window, _, mut position, mut bounds, resize, was_parked, was_compact) in
+        positioned_windows
+    {
+        let Some(context) = presentation.windows.get(&entity) else {
             continue;
         };
         let Ok((display, dock)) = displays.get(context.display_entity) else {
@@ -1734,24 +1932,66 @@ fn position_layout_windows(
         // h_pad to the virtual x, so subtract it here so the OS window
         // lands exactly sliver_width pixels from the screen edge.
         let h_pad = window.horizontal_padding();
-        let Some(mut frame) = current_frames.get(&entity).copied() else {
+        let Some(mut frame) = presentation.frames.get(&entity).copied() else {
             continue;
         };
         frame.min += context.strip_position;
         frame.max += context.strip_position;
 
-        let (mut frame, mut offscreen) = horizontal_parking(frame, viewport, h_pad, &config);
+        let fully_hidden = presentation.hidden.contains(&entity)
+            || frame.max.x <= viewport.min.x + h_pad
+            || frame.min.x >= viewport.max.x - h_pad;
+        if config.compact_parking() {
+            let parked = fully_hidden
+                || crosses_display_seam(
+                    frame,
+                    display.bounds(),
+                    &connected_bounds,
+                    bevy::math::IVec2::new(h_pad, window.vertical_padding()),
+                );
+            let limit = parked.then(|| {
+                compact_parking(
+                    frame.size(),
+                    display.bounds(),
+                    &parking_displays,
+                    bevy::math::IVec2::new(h_pad, window.vertical_padding()),
+                )
+            });
+            if let Some(geometry) = limit {
+                frame = geometry.frame;
+            }
+            update_parking_state(
+                &mut commands,
+                entity,
+                limit.map(|geometry| geometry.size_limit),
+                was_compact,
+            );
+            if was_compact && !parked {
+                bounds.set_changed();
+            }
+            if resize.is_none() && bounds.0 != frame.size() {
+                bounds.0 = frame.size();
+            }
+            if position.0 != frame.min {
+                position.0 = frame.min;
+            }
+            commands.entity(entity).try_remove::<RepositionMarker>();
+            continue;
+        }
 
-        let anchored = anchored_parking(
+        if was_compact {
+            commands.entity(entity).try_remove::<CompactParked>();
+            bounds.set_changed();
+        }
+        let (frame, rerouted) = legacy_parking(
             frame,
+            viewport,
             display.bounds(),
             &connected_bounds,
-            offscreen,
-            offscreen_sliver_width,
+            &config,
+            h_pad,
+            (context.swiping, context.stacked),
         );
-        let rerouted = anchored != frame;
-        frame = anchored;
-        offscreen |= rerouted;
         if rerouted != was_parked
             && let Ok(mut entity_commands) = commands.get_entity(entity)
         {
@@ -1760,36 +2000,6 @@ fn position_layout_windows(
             } else {
                 entity_commands.try_remove::<AdjacentDisplayParked>();
             }
-        }
-
-        // During swipe, keep full height. The vertical sliver inset only
-        // applies to horizontally off-screen windows, so they expose just
-        // a `sliver_height` fraction of their height at the viewport's
-        // vertical center.
-        if !context.swiping && offscreen {
-            // Don't compress stacked windows vertically when off-screen.
-            // The height reduction corrupts their proportions: when the
-            // column scrolls back on-screen, binpack_heights makes the
-            // last window absorb all remaining space.
-            if !context.stacked {
-                let inset =
-                    round_px(f64::from(viewport.height()) * (1.0 - config.sliver_height()) / 2.0);
-                frame.min.y += inset;
-                frame.max.y += inset;
-            }
-        }
-
-        // Keep the window anchored to its own display. The parked strip origin
-        // only accounts for the first window: everything sitting below it in a
-        // stack picks up that offset on top of the corner and lands past the
-        // bottom edge, fully inside the display underneath. macOS then adopts
-        // the window onto that display, and showing the workspace again brings
-        // it back there instead of here. Park those at the corner as well.
-        let park_row = viewport.max.y - PARKED_STRIP_SLIVER;
-        if frame.min.y > park_row {
-            let height = frame.height();
-            frame.min.y = park_row;
-            frame.max.y = park_row + height;
         }
 
         if resize.is_none() && bounds.0 != frame.size() {

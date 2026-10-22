@@ -625,13 +625,22 @@ impl WindowOS {
             )
         };
         if let Ok(position) = AXUIWrapper::from_retained(position_ref) {
-            unsafe {
+            let status = unsafe {
                 AXUIElementSetAttributeValue(
                     self.ax_element.as_ptr(),
                     CFString::from_static_str(kAXPositionAttribute).as_ref(),
                     position.as_ref(),
                 )
             };
+            if status != kAXErrorSuccess {
+                warn!(
+                    window_id = self.id,
+                    ?origin,
+                    ?status,
+                    "AX position rejected"
+                );
+                return;
+            }
             let size = self.frame.size();
             self.frame.min = origin;
             self.frame.max = origin + size;

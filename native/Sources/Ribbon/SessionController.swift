@@ -9,6 +9,9 @@ enum SessionPhase: String {
   case running = "Running"
   case stopping = "Restoring windows…"
   var busy: Bool { self == .starting || self == .stopping }
+  func canToggleSession(recoveryPending: Bool, canManageApplications: Bool) -> Bool {
+    !busy && (self == .running || !recoveryPending && canManageApplications)
+  }
 }
 
 struct RunningApp: Identifiable {
@@ -32,11 +35,16 @@ final class SessionController: ObservableObject {
   private var expectedExit = false
   private var commandInFlight = false
   private var restorationInFlight = false
+  @Published private(set) var reduceMotion = NSWorkspace.shared
+    .accessibilityDisplayShouldReduceMotion
+  private var accessibilityObserver: NSObjectProtocol?
 
   init(store: LocalStore? = nil) {
     if let store {
       self.store = store
-    } else if let index = CommandLine.arguments.firstIndex(of: "--qa-output"),
+    } else if let index = CommandLine.arguments.firstIndex(where: {
+      ["--qa-output", "--ui-qa-output"].contains($0)
+    }),
       CommandLine.arguments.indices.contains(index + 1)
     {
       self.store = LocalStore(
@@ -55,7 +63,53 @@ final class SessionController: ObservableObject {
     } catch {
       notice = "Saved settings or recovery data could not be read. \(error.localizedDescription)"
     }
+    if settings.scope == .demo && !CommandLine.arguments.contains("--qa-output")
+      && !CommandLine.arguments.contains("--ui-qa-output")
+    {
+      settings.scope = .all
+    }
+    if CommandLine.arguments.contains("--qa-output")
+      || CommandLine.arguments.contains("--ui-qa-output")
+    {
+      settings.scope = .demo
+      settings.excludedBundleIDs = []
+    }
     refreshApps()
+    accessibilityObserver = NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in
+        guard let self else { return }
+        self.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        self.saveSettings()
+      }
+    }
+  }
+
+  var sessionButtonTitle: String {
+    switch phase {
+    case .stopped: "Start Ribbon"
+    case .starting: "Starting…"
+    case .running: "Pause & Restore"
+    case .stopping: "Restoring…"
+    }
+  }
+  var canToggleSession: Bool {
+    phase.canToggleSession(
+      recoveryPending: recoveryPending, canManageApplications: settings.canManageApplications)
+  }
+  func toggleSession() async {
+    if phase == .running {
+      await pause()
+    } else {
+      await refreshPermission()
+      guard permissionGranted else {
+        openPermissionSettings()
+        return
+      }
+      await start()
+    }
   }
 
   var engineURL: URL {
@@ -63,14 +117,21 @@ final class SessionController: ObservableObject {
   }
   var fixtureURL: URL { Bundle.main.resourceURL!.appendingPathComponent("Ribbon Demo.app") }
   var engineEnvironment: [String: String] {
-    [
+    var policy = settings
+    if CommandLine.arguments.contains("--qa-output")
+      || CommandLine.arguments.contains("--ui-qa-output")
+    {
+      policy.scope = .demo
+      policy.excludedBundleIDs = []
+    }
+    return [
       "PANERU_MACH_SERVICE": "dev.ribbon.engine.\(getuid())",
       "PANERU_CONFIG": store.directory.appendingPathComponent("engine.toml").path,
       "XDG_CONFIG_HOME": store.directory.appendingPathComponent("config").path,
       "XDG_STATE_HOME": store.directory.appendingPathComponent("state").path,
-      "RIBBON_MANAGED_APPS": settings.managedBundleIDs.sorted().joined(separator: ","),
+
       "RIBBON_PARENT_PID": String(getpid()), "RUST_LOG": "error",
-    ]
+    ].merging(policy.engineScopeEnvironment) { _, new in new }
   }
 
   func refreshApps() {
@@ -86,7 +147,7 @@ final class SessionController: ObservableObject {
 
   func refreshPermission() async {
     guard FileManager.default.isExecutableFile(atPath: engineURL.path) else {
-      notice = "The bundled engine is missing. Rebuild the app using scripts/build-app.sh."
+      notice = "Ribbon’s window service is missing. Reinstall Ribbon to continue."
       permissionGranted = false
       return
     }
@@ -102,10 +163,24 @@ final class SessionController: ObservableObject {
     let options =
       [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
     _ = AXIsProcessTrustedWithOptions(options)
-    if let url = URL(
-      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-    {
-      NSWorkspace.shared.open(url)
+    guard
+      let url = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+    else { return }
+    // Yield before opening: otherwise Settings can navigate behind Ribbon on
+    // current macOS, leaving the user to activate its Dock icon manually.
+    NSApp.yieldActivation(toApplicationWithBundleIdentifier: "com.apple.systempreferences")
+    let configuration = NSWorkspace.OpenConfiguration()
+    configuration.activates = true
+    NSWorkspace.shared.open(url, configuration: configuration) { [weak self] app, error in
+      Task { @MainActor in
+        if let error {
+          self?.notice = "System Settings could not be opened. \(error.localizedDescription)"
+        } else if let app {
+          NSApp.yieldActivation(to: app)
+          _ = app.activate(from: .current, options: [])
+        }
+      }
     }
   }
 
@@ -120,7 +195,7 @@ final class SessionController: ObservableObject {
 
   private func writeEngineConfiguration() throws {
     try store.prepare()
-    try settings.engineConfiguration().write(
+    try settings.engineConfiguration(reduceMotion: reduceMotion).write(
       to: store.directory.appendingPathComponent("engine.toml"),
       atomically: true, encoding: .utf8)
   }
@@ -147,8 +222,8 @@ final class SessionController: ObservableObject {
       phase = .stopped
       return
     }
-    guard !settings.managedBundleIDs.isEmpty else {
-      notice = "Choose at least one application to manage."
+    guard settings.canManageApplications else {
+      notice = "No applications are available in this scope."
       phase = .stopped
       return
     }
@@ -160,10 +235,14 @@ final class SessionController: ObservableObject {
         try await openDemo()
         try await Task.sleep(for: .milliseconds(300))
       }
-      let identities = ApplicationIdentity.running(in: settings.managedBundleIDs)
-      let windows = try await AccessibilityWorkspace.snapshot(identities)
+      let bundles = settings.managedBundleIDs(in: ApplicationIdentity.runningBundleIDs)
+      let identities = ApplicationIdentity.running(in: bundles)
+      let windows = try await AccessibilityWorkspace.snapshot(
+        identities, strict: settings.scope != .all)
       try store.write(
-        RecoveryJournal(windows: windows, managedBundleIDs: settings.managedBundleIDs),
+        RecoveryJournal(
+          windows: windows, managedBundleIDs: bundles, scope: settings.scope,
+          excludedBundleIDs: settings.excludedBundleIDs),
         to: "recovery.json")
       recoveryPending = true
       let child = Process()
@@ -182,7 +261,7 @@ final class SessionController: ObservableObject {
         child.standardOutput = handle
         child.standardError = handle
         child.environment?["RUST_LOG"] =
-          "warn,paneru::ecs::focus=trace,paneru::manager::windows=debug,paneru::commands=debug"
+          "warn,paneru::ecs::focus=trace,paneru::manager::windows=debug,paneru::commands=debug,paneru::ecs::systems=debug"
       }
       child.terminationHandler = { [weak self] process in
         Task { @MainActor in self?.engineExited(process) }
@@ -224,7 +303,7 @@ final class SessionController: ObservableObject {
           phase = .stopped
         }
       } else {
-        notice = "The engine stopped. Your recovery record is available below."
+        notice = "Ribbon stopped unexpectedly. Open General to restore your windows."
       }
     }
   }
@@ -297,7 +376,8 @@ final class SessionController: ObservableObject {
         notice = "Ribbon needs Accessibility access to restore the previous window positions."
         return
       }
-      let apps = ApplicationIdentity.running(in: journal.managedBundleIDs)
+      let apps = ApplicationIdentity.running(
+        in: journal.recoveryBundleIDs(in: ApplicationIdentity.runningBundleIDs))
       let top = NSScreen.screens.first?.frame.maxY ?? 0
       let displays = NSScreen.screens.map { screen in
         CGRect(

@@ -217,6 +217,30 @@ pub fn parse_virtual_workspace_number(input: &str) -> Result<u32, ParseError> {
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Operation {
+    /// Show Ribbon's native icon overview without changing layout or focus.
+    Overview,
+    /// Focus a managed tile by its stable native window id.
+    FocusId(i32),
+    /// Move a whole column beside another column in the same visible strip.
+    Reorder {
+        window: i32,
+        anchor: i32,
+        after: bool,
+    },
+    /// Link two adjacent columns without changing their widths.
+    Pair(Direction),
+    PairId {
+        window: i32,
+        direction: Direction,
+    },
+    Unpair,
+    UnpairId(i32),
+    /// Fit a pair (or two independent neighbors) to the viewport. Ratio is left width.
+    PairFit(f64),
+    PairFitId {
+        window: i32,
+        ratio: f64,
+    },
     /// Focuses on a window in the specified `Direction`.
     Focus(Direction),
     /// Swaps the current window with another in the specified `Direction`.

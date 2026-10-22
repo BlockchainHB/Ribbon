@@ -269,9 +269,21 @@ pub struct Windows<'w, 's> {
         With<FullWidthMarker>,
     >,
     positions: WindowPlacements<'w, 's>,
+    parked: Query<'w, 's, (), With<crate::ecs::layout::parking::CompactParked>>,
+    preferred: Query<'w, 's, &'static crate::ecs::layout::width_policy::PreferredWidth>,
 }
 
 impl Windows<'_, '_> {
+    pub fn preferred_width(&self, entity: Entity) -> Option<i32> {
+        self.preferred
+            .get(entity)
+            .ok()
+            .map(|width| width.width)
+            .or_else(|| self.moving_frame(entity).map(|frame| frame.width()))
+    }
+    pub fn is_parked(&self, entity: Entity) -> bool {
+        self.parked.contains(entity)
+    }
     fn get_all(&self, entity: Entity) -> Option<(&Window, Entity, &ChildOf, Option<&Unmanaged>)> {
         self.all
             .get(entity)

@@ -1,63 +1,430 @@
 {
-  "verified_at": "2026-10-21T00:29:51.703938+00:00",
+  "verified_at": "2026-10-22T01:19:38.791437+00:00",
   "build": {
-    "version": "0.1.1",
+    "version": "0.2.0",
+    "build": "16",
     "engine": "Paneru 0.5.2",
     "upstream_commit": "12c58b2225a40e434053ea9343a41e2012466f9a",
-    "signing": "local ad-hoc",
-    "notarized": false,
-    "engine_profile": "release"
+    "engine_profile": "release",
+    "signing": "existing Developer ID Application certificate",
+    "notarized": false
   },
   "system": "Version 27.0.1 (Build 26A434)",
-  "engine_sha256": "5a2df862a012ac02a9f5d04febe4c8bd7018e6817495ff46c0a06d7571037dff",
-  "archive_sha256": "eae790cc0e38eccfa782fd976457489f97583f903382d5c9a7ac3652db29a013",
+  "engine_sha256": "ba47544e87d11e62975eb94e7ffc007ac82cb985887744e13ba897acff3ad5f9",
+  "native_sha256": "cc3176a4e17e1a536582db54b5fa8853375008007e144b19a70f061e49920bc1",
+  "archive_sha256": "7a013254a3dfffb4958cdcebb6e33635be4b7c5bd08d5efb03d4a6077a2fc1d8",
   "automated_checks": {
+    "command": "scripts/verify.sh",
+    "status": "passed",
     "rust_default": {
       "library": 46,
-      "binary": 448
+      "binary": 483
     },
     "rust_shipping_features": {
       "library": 39,
-      "binary": 365
+      "binary": 400
     },
-    "swift": 7,
+    "swift": 26,
     "format_and_clippy": "passed",
     "bundle_signature": "passed",
-    "archive_crc_and_executables": "passed"
+    "archive_crc_and_executables": "passed",
+    "new_width_policy_engine_tests": 8,
+    "log": "build/qa/pairing/build16-verify.log",
+    "new_pairing_engine_tests": 11
   },
   "desktop": {
-    "status": "passed",
-    "app": "/Users/neat/Applications/Ribbon.app",
-    "suites": {
-      "single": {
-        "status": "passed",
+    "status": "14 native pairing/lifecycle/scope checks passed on the built-in display; physical dual-display pairing unverified",
+    "build16_pairing": {
+      "directory": "build/qa/pairing/build16-release-2",
+      "engine_sha256": "ba47544e87d11e62975eb94e7ffc007ac82cb985887744e13ba897acff3ad5f9",
+      "scope": "disposable fixture only; excluded sentinel unchanged",
+      "checks": [
+        {
+          "name": "native sidebar settings window",
+          "passed": true
+        },
+        {
+          "name": "visible menu bar icon opens populated native menu and closes with Escape",
+          "passed": true
+        },
+        {
+          "name": "start and exact application scope",
+          "passed": true
+        },
+        {
+          "name": "pairing preserves widths on display 1",
+          "passed": true
+        },
+        {
+          "name": "three pair ratios fit actual native windows; internal focus stays still",
+          "passed": true
+        },
+        {
+          "name": "reorder moves a complete native pair",
+          "passed": true
+        },
+        {
+          "name": "real app activation reveals a hidden pair and focuses the requested member",
+          "passed": true
+        },
+        {
+          "name": "native overview pairing menu and Ungroup action",
+          "passed": true
+        },
+        {
+          "name": "independent arrangement works without pair membership",
+          "passed": true
+        },
+        {
+          "name": "excluded application never moved",
+          "passed": true
+        },
+        {
+          "name": "native switch pauses a running session with a recovery journal",
+          "passed": true
+        },
+        {
+          "name": "pause restores original native frames",
+          "passed": true
+        },
+        {
+          "name": "start-pause-start lifecycle",
+          "passed": true
+        },
+        {
+          "name": "no title-bearing engine state written",
+          "passed": true
+        }
+      ],
+      "displays": [
+        {
+          "height": 1117,
+          "id": 1,
+          "name": "Built-in Retina Display",
+          "scale": 2,
+          "width": 1728,
+          "x": 0,
+          "y": 0
+        }
+      ],
+      "initial_candidate": "build/qa/pairing/build16-candidate-1/report.json",
+      "initial_candidate_note": "Native checks reached Ungroup; QA receipt dictionary cast rejected a text field. Reader corrected; full run passed."
+    },
+    "simulated_dual_display": "Pair transfer follow/send and refitting verified in Rust harness with unequal display bounds; distinct from physical hardware."
+  },
+  "native_ui": {
+    "status": "visually reviewed in light and dark",
+    "implementation": "Native sidebar and grouped forms; Column widths picker; semantic search text with glass clearance; Excluded Apps page",
+    "width_policy_evidence": [
+      "build/qa/width-policy/settings-light",
+      "build/qa/width-policy/settings-dark"
+    ],
+    "other_panes_evidence": [
+      "build/qa/offscreen-parking/settings-build9-light",
+      "build/qa/offscreen-parking/settings-build9-dark"
+    ],
+    "selection_persists_after_reopening": true,
+    "appearance_override": "app only; system appearance unchanged",
+    "permission_fix": "General help text and enabled switch; Settings foreground verified",
+    "overview": {
+      "status": "visually reviewed actual native captures in light and dark",
+      "evidence": [
+        "build/qa/pairing/build16-release-2/pair-overview-light.png",
+        "build/qa/pairing/build16-release-2/pair-overview-dark.png"
+      ],
+      "design": "Centered 80pt app icons and 14pt titles; small native-material blue link badges; native context menu for explicit pairing, ungroup and arrangement. No added sidebar, dashboard or persistent footer.",
+      "behavior": "Actual Ungroup context menu, pair fitting, whole-pair reorder and hidden-member app activation verified. Drag uses engine movement-block semantics.",
+      "scope": "Two adjacent columns per non-nested pair; each retains its existing stack/tab structure."
+    },
+    "motion": {
+      "audit": "docs/motion-audit.md",
+      "captures": [
+        "build/qa/motion/build14-release-5/overview-light.png",
+        "build/qa/motion/build14-release-5/overview-dark.png"
+      ],
+      "review": "actual captured native windows inspected in light and dark",
+      "capture": "External native macOS screenshot tool; no new Ribbon Screen Recording grant",
+      "pointer_drop_animation_ms": 200,
+      "press_scale": 0.96,
+      "press_duration_ms": 120,
+      "default_geometry_animation_seconds": 0.2285714285714286,
+      "maximum_geometry_animation_seconds": 0.3,
+      "reduced_motion": "engine instant path tested and UI code inspected; OS preference not changed during QA"
+    },
+    "session_controls": {
+      "switch": "Real mouse clicks performed on -> off -> on -> off against disposable fixtures",
+      "menu": "Native external AX press; actual opened menu has nonzero dimensions, enabled Settings row, Escape closes it",
+      "fixes": [
+        "One availability rule permits pausing while active recovery journal exists",
+        "Show own status item explicitly at launch using public AppKit API",
+        "Populate native menu before first opening; release global engine key equivalents while closed"
+      ],
+      "sources": [
+        "https://developer.apple.com/documentation/appkit/nsstatusitem/isvisible"
+      ]
+    },
+    "pairing_shortcuts": {
+      "actions": [
+        "Pair with Left",
+        "Pair with Right",
+        "Ungroup Pair",
+        "Arrange half/half",
+        "Arrange third/two-thirds",
+        "Arrange two-thirds/third"
+      ],
+      "defaults": "unassigned; existing bindings preserved",
+      "customization": "existing shortcut recorder/config generation; snapshot movement range regression added"
+    }
+  },
+  "historical_receipts": {
+    "parking_build9": {
+      "status": "passed",
+      "evidence_directory": "build/qa/offscreen-parking/release-build9-2",
+      "native_checks": 28,
+      "motion_samples": 672,
+      "neighbor_body_spill_samples": 0,
+      "minimum_moving_gap_points": 11,
+      "settled_gap_points": 12,
+      "watchdog_exit_ms": 371
+    },
+    "parking_debug": "build/qa/offscreen-parking/dual-9",
+    "older_compact_settings": "build/qa/compact-settings-acceptance",
+    "failed_candidates_retained": [
+      "build/qa/offscreen-parking/dual-1 through dual-8",
+      "build/qa/offscreen-parking/raycast-build9",
+      "build/qa/offscreen-parking/raycast-build9-2",
+      "build/qa/width-policy/debug",
+      "build/qa/width-policy/release",
+      "build/qa/overview/release-1 (second monitor absent)",
+      "build/qa/overview/release-2 through release-8, diagnostic-3 (retained failed candidates; diagnostic-3 includes an external CLI intervention)"
+    ],
+    "build14_failed_candidates": {
+      "build/qa/motion/build14-release-1": "LaunchServices open -600; driver did not start tests",
+      "build/qa/motion/build14-release-2": "Final gap undefined with a single full-width tile; motion data retained",
+      "build/qa/motion/build14-release-3": "Same final-gap setup; intended QA patch had not matched formatted source",
+      "build/qa/motion/build14-release-4": "14 interaction checks passed and 306 motion samples; native screenshot outputs absent, so no visual acceptance claimed"
+    },
+    "build15_failed_candidates": {
+      "build/qa/controls/build15-release-1": "Actual empty-menu issue exposed by first native menu test",
+      "build/qa/controls/build15-release-2": "In-process mouse test did not establish a completed menu opening",
+      "build/qa/controls/build15-release-3": "In-process proxy/AX status item location did not complete menu opening",
+      "build/qa/controls/build15-release-4": "Status-item placement assertion failed during startup; external Control Center AX driver used for acceptance"
+    }
+  },
+  "limitations": [
+    "Build16 pairing tested on one built-in display by user direction. Physical dual-monitor transfers, mixed scales, hotplug and second-monitor edge flashes unverified for pairing; engine dual-display tests passed.",
+    "Actual Raycast Quicklink UI execution unverified for pairing; real native application activation of a hidden pair member passed.",
+    "Pair membership is session-local; pausing restores original native frames and a fresh engine starts unpaired.",
+    "Parking may leave a 1-point by 32-point native residual; no universal zero-pixel guarantee",
+    "Physical unplug/reconnect, sleep/wake, clamshell, portrait and mixed-refresh hardware unverified",
+    "VoiceOver, full keyboard traversal, increased contrast, remapped global keys and alternate keyboard layouts unverified",
+    "Fresh GUI Accessibility onboarding and full final recorder interaction matrix unverified",
+    "Live adaptive Dock appearances unverified",
+    "Build14 physical dual-monitor motion, overview and flush-height verification unperformed; second monitor disconnected",
+    "Physical finger-trackpad feel, slow-motion screen-video review and OS Reduce Motion toggle not verified in build14; native modifier-scroll injection and reduced-motion code paths were checked"
+  ],
+  "release_startup_retry": "First direct-executable launch restored no window and timed out before fixtures; normal LaunchServices reopen started the scoped test successfully.",
+  "prior_width_policy_build10": {
+    "engine_sha256": "c3fe69be42ab5cd4dea46177662b053cc9a20f3a5658f8b900d6cb991f7d3fd2",
+    "native_sha256": "614c96a4aae1aca332d584e51e33c1e7d15edf86967703dc1eba95b50a6393b1",
+    "archive_sha256": "5016dd0ef923f9524f2f71cd9fb74c5d8c98463e3b5453ab5582c0e10794ff71",
+    "desktop": {
+      "status": "passed",
+      "scope": "disposable fixture only",
+      "app": "/Users/neat/Applications/Ribbon.app",
+      "width_policy": {
+        "evidence_directory": "build/qa/width-policy/release-2",
         "checks": [
+          {
+            "name": "native sidebar settings window",
+            "passed": true
+          },
           {
             "name": "start and exact application scope",
             "passed": true
           },
           {
-            "name": "moving tiles remain separated on display 2",
+            "name": "fill uses both monitors with native gaps and no spill",
             "passed": true
           },
           {
-            "name": "repeated navigation reaches actual native windows",
+            "name": "two live policy round trips restore preferred widths",
             "passed": true
           },
           {
-            "name": "navigation preserves widths",
+            "name": "excluded application never moved",
             "passed": true
           },
           {
-            "name": "width presets change actual frames",
+            "name": "pause restores original native frames",
             "passed": true
           },
           {
-            "name": "opening windows preserves existing widths",
+            "name": "start-pause-start lifecycle",
             "passed": true
           },
           {
-            "name": "stacking preserves the configured vertical gap",
+            "name": "no title-bearing engine state written",
+            "passed": true
+          }
+        ],
+        "engineSHA256": "c3fe69be42ab5cd4dea46177662b053cc9a20f3a5658f8b900d6cb991f7d3fd2",
+        "displays": [
+          {
+            "height": 1440,
+            "id": 2,
+            "name": "Kuycon G32P",
+            "scale": 2,
+            "width": 2560,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "height": 1117,
+            "id": 1,
+            "name": "Built-in Retina Display",
+            "scale": 2,
+            "width": 1728,
+            "x": 2560,
+            "y": 323
+          }
+        ],
+        "observed_native_widths": {
+          "preferred_points": 300,
+          "filled_external_points": 625,
+          "filled_laptop_points": 417
+        },
+        "live_round_trips": 2
+      },
+      "debug_evidence_directory": "build/qa/width-policy/debug-2"
+    },
+    "native_ui": {
+      "status": "visually reviewed in light and dark",
+      "implementation": "Native sidebar and grouped forms; Column widths picker; semantic search text with glass clearance; Excluded Apps page",
+      "width_policy_evidence": [
+        "build/qa/width-policy/settings-light",
+        "build/qa/width-policy/settings-dark"
+      ],
+      "other_panes_evidence": [
+        "build/qa/offscreen-parking/settings-build9-light",
+        "build/qa/offscreen-parking/settings-build9-dark"
+      ],
+      "selection_persists_after_reopening": true,
+      "appearance_override": "app only; system appearance unchanged",
+      "permission_fix": "General help text and enabled switch; Settings foreground verified"
+    }
+  },
+  "permission_fix": {
+    "stable_designated_requirements": {
+      "native": "identifier \"dev.ribbon.app\" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = G2537ZRGNU",
+      "engine": "identifier \"dev.ribbon.app\" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = G2537ZRGNU"
+    },
+    "system_settings_foreground": "verified from actual General button",
+    "native_toggle_enabled": "AXEnabled=1 while permission missing",
+    "fresh_gui_permission": "Passed: after user grant and signed build12 update, actual GUI shows Accessibility Allowed; both native and GUI-spawned engine checks enforced.",
+    "refresh": "on activation and every 2 seconds while active and unapproved",
+    "scope": "No unrestricted engine launched",
+    "diagnosis": "build/qa/permission-identity/diagnosis.json",
+    "targeted_reset": {
+      "command": "tccutil reset Accessibility dev.ribbon.app",
+      "result": "success",
+      "authorization": "Explicit user reply: Reset Ribbon\u2019s stale entry",
+      "after": "Relaunched installed app; opened permission page through actual General button; Ribbon AXValue=0. Management remains paused."
+    }
+  },
+  "prior_permission_build11": {
+    "build": {
+      "version": "0.2.0",
+      "build": "12",
+      "engine": "Paneru 0.5.2",
+      "upstream_commit": "12c58b2225a40e434053ea9343a41e2012466f9a",
+      "engine_profile": "release",
+      "signing": "existing Developer ID Application certificate",
+      "notarized": false
+    },
+    "engine_sha256": "b6a9d77a0e174be2c4eb9a6b61ac7fd27325615cb9d909ce4bba727cddf4d05b",
+    "native_sha256": "4230bbfb44860a59e659f79af790d493004f6ce2d9d330b1d079046048b89f45",
+    "archive_sha256": "3b73e79c945e614be22f41663afcb6c7eb5e5ec6134e788c33d2c766f58129dc",
+    "desktop": {
+      "status": "permission handoff verified; layout hardware receipt is build 10",
+      "build11_fixture_run": "not run; layout engine source unchanged"
+    }
+  },
+  "width_presets": {
+    "values": [
+      0.33333,
+      0.5,
+      0.66667,
+      0.75,
+      1.0
+    ],
+    "verified": "Installed build12 --print-config and engine check-config; scripts/verify.sh passed",
+    "hardware": "No new physical width-cycle QA; no unrestricted engine launched during automated verification"
+  },
+  "prior_width_preset_build12": {
+    "build": {
+      "version": "0.2.0",
+      "build": "13",
+      "engine": "Paneru 0.5.2",
+      "upstream_commit": "12c58b2225a40e434053ea9343a41e2012466f9a",
+      "engine_profile": "release",
+      "signing": "existing Developer ID Application certificate",
+      "notarized": false
+    },
+    "engine_sha256": "7a3c65835772036ed092876bca9e107419b13d1d4e53daef21d72352112b7cc3",
+    "native_sha256": "f5ca9b78c6eae3b189561fe20edb8182ea6cfea91fe007101eebea7b9da25701",
+    "archive_sha256": "e2803f4a78d342408382059b904caa6bb0763ec0c4acb4775e83e95b3fa38d22",
+    "desktop": {
+      "status": "build12 GUI shows Accessibility Allowed; management left paused after installation",
+      "layout_hardware_receipt": "build10; no new desktop width-cycle QA performed"
+    }
+  },
+  "prior_overview_build13": {
+    "verified_at": "2026-10-21T23:54:05.032351+00:00",
+    "build": {
+      "version": "0.2.0",
+      "build": "13",
+      "engine": "Paneru 0.5.2",
+      "upstream_commit": "12c58b2225a40e434053ea9343a41e2012466f9a",
+      "engine_profile": "release",
+      "signing": "existing Developer ID Application certificate",
+      "notarized": false
+    },
+    "engine_sha256": "4d3338a1ccf61d961c87b1584bfde9f1283dfb457076509b78d3cff39a0c79fe",
+    "native_sha256": "6bde0520b3bfd2ecbf760266dcd235cb43ea99debb8e4f173d22c5fa37e5ffc6",
+    "archive_sha256": "33c821d2f6cfa0de196b1bbb006fc0b3da12fbeb674c5eb730f3c5a8e1165dc7",
+    "desktop": {
+      "status": "passed on the connected built-in display; second physical monitor unavailable",
+      "build13_overview": {
+        "evidence_directory": "build/qa/overview/release-9",
+        "scope": "disposable fixture only; sentinel unchanged",
+        "checks": [
+          {
+            "name": "native sidebar settings window",
+            "passed": true
+          },
+          {
+            "name": "start and exact application scope",
+            "passed": true
+          },
+          {
+            "name": "overview includes all connected strips and hidden tiles",
+            "passed": true
+          },
+          {
+            "name": "native icon drag inserts column on display 1",
+            "passed": true
+          },
+          {
+            "name": "native overview arrow and Return navigation",
+            "passed": true
+          },
+          {
+            "name": "full usable height without vertical outer gaps on display 1",
+            "passed": true
+          },
+          {
+            "name": "stack retains internal gap and flush outer edges on display 1",
             "passed": true
           },
           {
@@ -79,49 +446,86 @@
         ],
         "displays": [
           {
-            "height": 1440,
-            "id": 2,
-            "name": "Kuycon G32P",
-            "scale": 2,
-            "width": 2560,
-            "x": 0,
-            "y": 0
-          },
-          {
             "height": 1117,
             "id": 1,
             "name": "Built-in Retina Display",
             "scale": 2,
             "width": 1728,
-            "x": 2560,
-            "y": 323
+            "x": 0,
+            "y": 0
           }
         ],
-        "engineSHA256": "5a2df862a012ac02a9f5d04febe4c8bd7018e6817495ff46c0a06d7571037dff",
-        "motion": [
-          {
-            "displayID": 2,
-            "minimumGap": 12,
-            "movingSamples": 62,
-            "samples": 224,
-            "settledGap": 12
-          }
-        ],
-        "detail": "Disposable fixture applications only. Focus timings include 100 ms reporting cadence; these are not input-to-photon benchmarks."
+        "engine_sha256": "4d3338a1ccf61d961c87b1584bfde9f1283dfb457076509b78d3cff39a0c79fe",
+        "full_height": {
+          "top": 33,
+          "bottom": 1117,
+          "height": 1084,
+          "horizontal_margin": 12
+        },
+        "stack": {
+          "top": 33,
+          "first_bottom": 569,
+          "second_top": 581,
+          "bottom": 1117,
+          "internal_gap": 12
+        }
       },
-      "dual": {
-        "status": "passed",
+      "second_monitor": "not verified in build13; only one display connected. Engine tests cover independent strips and cross-display rejection."
+    }
+  },
+  "post_qa_session": "Build16 normal app reopened paused with existing settings. QA used only disposable fixtures; no unrestricted engine ran during automated verification.",
+  "prior_motion_build14": {
+    "verified_at": "2026-10-22T00:17:04.476964+00:00",
+    "build": {
+      "version": "0.2.0",
+      "build": "14",
+      "engine": "Paneru 0.5.2",
+      "upstream_commit": "12c58b2225a40e434053ea9343a41e2012466f9a",
+      "engine_profile": "release",
+      "signing": "existing Developer ID Application certificate",
+      "notarized": false
+    },
+    "engine_sha256": "6c0c2d41091c43f02426afe0c941e1515ca8b932c213e92b3db3d6632e742601",
+    "native_sha256": "59f0acc779cfc345e8a8ea175a70246f6be8064e70cc3f53a6170c3f71d16d83",
+    "archive_sha256": "129a28828ec82f3ef56843f7fd230a95c00335386070511a29fedea7370f3199",
+    "automated_checks": {
+      "command": "scripts/verify.sh",
+      "status": "passed",
+      "rust_default": {
+        "library": 46,
+        "binary": 472
+      },
+      "rust_shipping_features": {
+        "library": 39,
+        "binary": 389
+      },
+      "swift": 22,
+      "format_and_clippy": "passed",
+      "bundle_signature": "passed",
+      "archive_crc_and_executables": "passed",
+      "new_width_policy_engine_tests": 8,
+      "log": "/tmp/ribbon-motion-verify-installed.log"
+    },
+    "desktop": {
+      "status": "passed on the connected built-in display; second physical monitor unavailable",
+      "build14_motion": {
+        "evidence_directory": "build/qa/motion/build14-release-5",
+        "scope": "disposable fixture only; sentinel unchanged",
         "checks": [
+          {
+            "name": "native sidebar settings window",
+            "passed": true
+          },
           {
             "name": "start and exact application scope",
             "passed": true
           },
           {
-            "name": "independent strips on both physical displays",
+            "name": "native modifier-scroll input moves the strip",
             "passed": true
           },
           {
-            "name": "moving tiles remain separated on display 2",
+            "name": "interrupted native movement and resizing settle",
             "passed": true
           },
           {
@@ -129,15 +533,23 @@
             "passed": true
           },
           {
-            "name": "navigation and overflow do not move the other monitor's windows",
+            "name": "overview includes all connected strips and hidden tiles",
             "passed": true
           },
           {
-            "name": "six physical display transfers preserve proportions and other widths",
+            "name": "native icon drag inserts column on display 1",
             "passed": true
           },
           {
-            "name": "opening a window preserves both monitors' existing widths",
+            "name": "native overview arrow and Return navigation",
+            "passed": true
+          },
+          {
+            "name": "full usable height without vertical outer gaps on display 1",
+            "passed": true
+          },
+          {
+            "name": "stack retains internal gap and flush outer edges on display 1",
             "passed": true
           },
           {
@@ -157,77 +569,217 @@
             "passed": true
           }
         ],
-        "displays": [
+        "motion": [
           {
-            "height": 1440,
-            "id": 2,
-            "name": "Kuycon G32P",
-            "scale": 2,
-            "width": 2560,
-            "x": 0,
-            "y": 0
-          },
+            "displayID": 1,
+            "minimumGap": 12,
+            "movingSamples": 76,
+            "neighborSpillSamples": 0,
+            "samples": 308,
+            "settledGap": 12
+          }
+        ],
+        "displays": [
           {
             "height": 1117,
             "id": 1,
             "name": "Built-in Retina Display",
             "scale": 2,
             "width": 1728,
-            "x": 2560,
-            "y": 323
+            "x": 0,
+            "y": 0
           }
         ],
-        "engineSHA256": "5a2df862a012ac02a9f5d04febe4c8bd7018e6817495ff46c0a06d7571037dff",
-        "motion": [
+        "engine_sha256": "6c0c2d41091c43f02426afe0c941e1515ca8b932c213e92b3db3d6632e742601"
+      },
+      "second_monitor": "Not verified for build 14; only the built-in display was connected"
+    }
+  },
+  "prior_controls_build15": {
+    "verified_at": "2026-10-22T00:36:24.465163+00:00",
+    "build": {
+      "version": "0.2.0",
+      "build": "15",
+      "engine": "Paneru 0.5.2",
+      "upstream_commit": "12c58b2225a40e434053ea9343a41e2012466f9a",
+      "engine_profile": "release",
+      "signing": "existing Developer ID Application certificate",
+      "notarized": false
+    },
+    "engine_sha256": "038881a050693e6abf7b6dc46937f84c638d9af4fe9a17b5b889d928862a81ba",
+    "native_sha256": "af7a002814c29800dcaac668e1473836b5f79750b63a3479475cd7f85d5fefb2",
+    "archive_sha256": "2e62e0b2270d3288f92bac2297f48c9b67e2cfae831da517feb861d67733aa33",
+    "automated_checks": {
+      "command": "scripts/verify.sh",
+      "status": "passed",
+      "rust_default": {
+        "library": 46,
+        "binary": 472
+      },
+      "rust_shipping_features": {
+        "library": 39,
+        "binary": 389
+      },
+      "swift": 25,
+      "format_and_clippy": "passed",
+      "bundle_signature": "passed",
+      "archive_crc_and_executables": "passed",
+      "new_width_policy_engine_tests": 8,
+      "log": "/tmp/ribbon-controls-verify-installed.log"
+    },
+    "desktop": {
+      "status": "16 native checks passed on the built-in display; second monitor disconnected",
+      "build15_controls": {
+        "directory": "build/qa/controls/build15-release-5",
+        "scope": "disposable fixture only; excluded sentinel unchanged",
+        "checks": [
           {
-            "displayID": 2,
-            "minimumGap": 12,
-            "movingSamples": 61,
-            "samples": 218,
-            "settledGap": 12
+            "name": "native sidebar settings window",
+            "passed": true
           },
+          {
+            "name": "visible menu bar icon opens populated native menu and closes with Escape",
+            "passed": true
+          },
+          {
+            "name": "start and exact application scope",
+            "passed": true
+          },
+          {
+            "name": "native modifier-scroll input moves the strip",
+            "passed": true
+          },
+          {
+            "name": "interrupted native movement and resizing settle",
+            "passed": true
+          },
+          {
+            "name": "moving tiles remain separated on display 1",
+            "passed": true
+          },
+          {
+            "name": "overview includes all connected strips and hidden tiles",
+            "passed": true
+          },
+          {
+            "name": "native icon drag inserts column on display 1",
+            "passed": true
+          },
+          {
+            "name": "native overview arrow and Return navigation",
+            "passed": true
+          },
+          {
+            "name": "full usable height without vertical outer gaps on display 1",
+            "passed": true
+          },
+          {
+            "name": "stack retains internal gap and flush outer edges on display 1",
+            "passed": true
+          },
+          {
+            "name": "excluded application never moved",
+            "passed": true
+          },
+          {
+            "name": "native switch pauses a running session with a recovery journal",
+            "passed": true
+          },
+          {
+            "name": "pause restores original native frames",
+            "passed": true
+          },
+          {
+            "name": "start-pause-start lifecycle",
+            "passed": true
+          },
+          {
+            "name": "no title-bearing engine state written",
+            "passed": true
+          }
+        ],
+        "motion": [
           {
             "displayID": 1,
             "minimumGap": 12,
-            "movingSamples": 57,
-            "samples": 212,
+            "movingSamples": 77,
+            "neighborSpillSamples": 0,
+            "samples": 314,
             "settledGap": 12
           }
         ],
-        "detail": "Disposable fixture applications only. Focus timings include 100 ms reporting cadence; these are not input-to-photon benchmarks."
+        "displays": [
+          {
+            "height": 1117,
+            "id": 1,
+            "name": "Built-in Retina Display",
+            "scale": 2,
+            "width": 1728,
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "engine_sha256": "038881a050693e6abf7b6dc46937f84c638d9af4fe9a17b5b889d928862a81ba",
+        "menu_external_ax": {
+          "opened": true,
+          "settings": true,
+          "closed": true
+        }
+      },
+      "second_monitor": "Not verified; only built-in display connected"
+    },
+    "native_ui": {
+      "status": "visually reviewed in light and dark",
+      "implementation": "Native sidebar and grouped forms; Column widths picker; semantic search text with glass clearance; Excluded Apps page",
+      "width_policy_evidence": [
+        "build/qa/width-policy/settings-light",
+        "build/qa/width-policy/settings-dark"
+      ],
+      "other_panes_evidence": [
+        "build/qa/offscreen-parking/settings-build9-light",
+        "build/qa/offscreen-parking/settings-build9-dark"
+      ],
+      "selection_persists_after_reopening": true,
+      "appearance_override": "app only; system appearance unchanged",
+      "permission_fix": "General help text and enabled switch; Settings foreground verified",
+      "overview": {
+        "status": "visually reviewed actual native captures in light and dark",
+        "evidence": [
+          "build/qa/overview/release-9/overview-light.png",
+          "build/qa/overview/release-9/overview-dark.png"
+        ],
+        "design": "Centered 80pt app icons, one 14pt title, native material; no footer, display labels, secondary text or context menus",
+        "behavior": "Control\u2013Option\u2013Tab; native icon drag, arrow and Return navigation, click to reveal genuinely parked tile verified",
+        "scope": "reorder columns within a monitor; stacks/tabs stay grouped"
+      },
+      "motion": {
+        "audit": "docs/motion-audit.md",
+        "captures": [
+          "build/qa/motion/build14-release-5/overview-light.png",
+          "build/qa/motion/build14-release-5/overview-dark.png"
+        ],
+        "review": "actual captured native windows inspected in light and dark",
+        "capture": "External native macOS screenshot tool; no new Ribbon Screen Recording grant",
+        "pointer_drop_animation_ms": 200,
+        "press_scale": 0.96,
+        "press_duration_ms": 120,
+        "default_geometry_animation_seconds": 0.2285714285714286,
+        "maximum_geometry_animation_seconds": 0.3,
+        "reduced_motion": "engine instant path tested and UI code inspected; OS preference not changed during QA"
+      },
+      "session_controls": {
+        "switch": "Real mouse clicks performed on -> off -> on -> off against disposable fixtures",
+        "menu": "Native external AX press; actual opened menu has nonzero dimensions, enabled Settings row, Escape closes it",
+        "fixes": [
+          "One availability rule permits pausing while active recovery journal exists",
+          "Show own status item explicitly at launch using public AppKit API",
+          "Populate native menu before first opening; release global engine key equivalents while closed"
+        ],
+        "sources": [
+          "https://developer.apple.com/documentation/appkit/nsstatusitem/isvisible"
+        ]
       }
     },
-    "watchdog": {
-      "status": "passed",
-      "child_pid": 34012,
-      "exit_observed_ms": 227
-    },
-    "evidence_directory": "build/qa/spacing-release-acceptance"
-  },
-  "focus_observations_ms": {
-    "samples": 8,
-    "minimum": 56.13,
-    "median": 96.7,
-    "maximum": 138.14,
-    "note": "Includes 100 ms fixture reporting cadence and CLI transport; not input-to-photon latency."
-  },
-  "unverified": [
-    "Physical unplug/reconnect",
-    "Sleep/wake and clamshell transitions",
-    "Portrait and mixed-refresh-rate hardware",
-    "Trackpad feel",
-    "Native UI visual capture",
-    "Fresh Finder launch permission onboarding"
-  ],
-  "native_sha256": "f065c663ad8b93552aa1a89081f77d96f5c2632b7b7d034671ffe488190ecaa5",
-  "motion_regression": {
-    "baseline_evidence_directory": "build/qa/spacing-baseline",
-    "baseline_observed_overlap_points": 638,
-    "sampling": "Fixture NSWindow frames on a nominal 60 Hz timer; not compositor or visual capture.",
-    "scope": "Columns with more than half their area on their owning display; parked slivers excluded.",
-    "release_samples": 654,
-    "release_minimum_gap_points": 12,
-    "release_settled_gap_points": 12,
-    "deterministic": "20 ms simulated frame regression covers navigation, growth, shrink, stacking and reordering, and retains resize animation."
+    "post_qa_session": "Normal app reopened paused after fixture QA; no all-app engine used for automated checks."
   }
 }
