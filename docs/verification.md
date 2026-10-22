@@ -359,3 +359,19 @@ replaced.
 Reproduce the isolated startup checks, with two displays and Ribbon quit:
 
     python3 scripts/qa-startup.py "$HOME/Applications/Ribbon.app" "$PWD/build/qa/fresh-startup-run"
+
+## Directional fill and dual-display motion — 2026-10-22
+
+See [navigation-motion.md](navigation-motion.md) for the seam/presentation fix,
+native focus scheduling, geometry echo suppression, final exit restoration,
+design review and timing limits. `scripts/verify.sh` passed: 490/407 engine tests,
+46/39 library tests, 26 Swift tests, formatting, strict Clippy and package checks.
+The installed signed engine is
+`b338c886569f347da02a5713bdd69bc11e88e413b2d996792d3056d5e7ae7c80`.
+Physical native navigation checks pass on both connected displays, including
+24 Control–Option arrow changes, external activation of eight parked tiles,
+visible neighbors after centering, seam containment in 60 Hz native-frame
+samples, and immediate-stop restoration. The full settings/menu/lifecycle suite
+passes nine checks each in `build/qa/navigation-startup-delivery/summary.json`.
+Personal applications remain outside the automated engine allowlist. Raw samples
+and screenshots are local ignored artifacts, not public repository assets.

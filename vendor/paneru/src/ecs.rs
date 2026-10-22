@@ -266,7 +266,6 @@ pub fn register_systems(app: &mut bevy::app::App) {
             systems::update_low_power_state
                 .run_if(resource_exists::<LowPowerMode>)
                 .run_if(on_timer(LOW_POWER_MODE_CHECK)),
-            systems::cleanup_on_exit,
             restore::tick_restore_grace,
             state::periodic_state_save.run_if(on_timer(Duration::from_mins(5))),
             state::cleanup_on_exit,
@@ -275,6 +274,9 @@ pub fn register_systems(app: &mut bevy::app::App) {
         )
             .in_set(UpdateSet::Housekeeping),
     );
+    // Restore native frames after all animation and focus writes in this final
+    // frame. An immediate quit must not re-park a just-restored window.
+    app.add_systems(Last, systems::cleanup_on_exit);
     app.add_systems(
         PostUpdate,
         (
@@ -862,8 +864,8 @@ pub fn setup_bevy_app(sender: EventSender, receiver: Receiver<Event>) -> Result<
     // inlined. The expensive systems here all take `&mut Window` and are
     // already mutually exclusive, so the fan-out bought little; genuine
     // parallelism (`par_iter_mut`) still goes through `ComputeTaskPool`
-    // directly. `First`/`Last` are included even though unused because an
-    // empty schedule still costs a task-pool scope per frame.
+    // directly. `First` is included even though unused because an empty schedule
+    // still costs a task-pool scope per frame. `Last` performs exit restoration.
     for label in [
         First.intern(),
         PreUpdate.intern(),

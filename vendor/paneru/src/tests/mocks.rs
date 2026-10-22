@@ -30,6 +30,8 @@ pub(crate) struct MockAppData {
 /// Data for a mocked window.
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct MockWindowData {
+    pub minimum_width: i32,
+    pub original_frame: IRect,
     pub(crate) id: WinID,
     pub(crate) pid: Pid,
     pub(crate) frame: IRect,
@@ -50,6 +52,8 @@ pub(crate) struct MockWindowData {
 impl Default for MockWindowData {
     fn default() -> Self {
         Self {
+            minimum_width: 0,
+            original_frame: IRect::default(),
             id: 0,
             pid: 0,
             frame: IRect::default(),
@@ -180,6 +184,7 @@ impl MockState {
                 id,
                 pid,
                 frame,
+                original_frame: frame,
                 title: format!("Window {id}"),
                 workspace_id,
                 ..default()
@@ -465,7 +470,7 @@ impl MockState {
         mw.expect_resize().returning(move |size| {
             let mut inner = s.inner.force_write();
             if let Some(w) = inner.windows.get_mut(&id) {
-                w.frame.max = w.frame.min + size;
+                w.frame.max = w.frame.min + size.with_x(size.x.max(w.minimum_width));
             }
         });
 
@@ -623,6 +628,14 @@ impl MockState {
         });
 
         // Fill in remaining defaults
+        let s = self.clone();
+        mw.expect_original_frame().returning(move || {
+            s.inner
+                .force_read()
+                .windows
+                .get(&id)
+                .map(|w| w.original_frame)
+        });
         mw.expect_element().return_const(None);
         mw.expect_raise_without_focus().return_const(());
 
@@ -850,6 +863,7 @@ impl MockState {
             .returning(move || Some(origin_to(s.inner.force_read().cursor_position)));
 
         wm.expect_get_associated_windows().return_const(vec![]);
+        wm.expect_dim_windows().return_const(());
 
         let s = self.clone();
         wm.expect_find_window_at_point().returning(move |at_point| {

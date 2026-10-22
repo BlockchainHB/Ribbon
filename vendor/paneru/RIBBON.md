@@ -187,3 +187,25 @@ engine option; Swift owns no layout geometry.
   block moves, stack leader removal, insertion, ungroup geometry, rejected-width
   readback, fill interaction, geometry changes and simulated dual-display transfer.
   Real-desktop verification is recorded separately in docs/pairing.md.
+
+## Native edge presentation and directional motion
+
+- `ecs/layout/parking.rs`: constrain a partially visible native window to its
+  exposed horizontal slot on either edge. `EdgePresentation` is presentation
+  only; full `Bounds`, ratios and preferred widths remain owned by the strip.
+  Tiny slots stay parked. A refused AX shrink records a session-local minimum
+  width and parks before repositioning, preserving adjacent-display protection.
+- `ecs/systems.rs`: commit the derived native size without changing logical
+  packing; restore full native size on reveal. Ignore own move/resize echoes
+  while the owning strip animates, and ignore clipped/parked presentation sizes.
+  Preserve manual geometry reads at rest and parallel native size commits.
+- `ecs/focus.rs`: coalesce native focus requests and issue them after geometry
+  commits, before mouse-follow behavior. Start rejection timing at the actual
+  native request. External activation still follows the existing focus/reveal
+  route; clipping does not become a new layout or focus authority.
+- Regression tests exercise both edges, preserved logical widths, minimum-size
+  fallback/recovery and geometry echo handling. Physical dual-monitor keyboard,
+  frame sampling, focus and recovery evidence is in docs/navigation-motion.md.
+- `ecs.rs`: restore native original frames in `Last`, after every geometry and
+  focus commit, so an immediate exit cannot be overwritten by its final frame.
+  A regression covers exit while strip movement is still active.

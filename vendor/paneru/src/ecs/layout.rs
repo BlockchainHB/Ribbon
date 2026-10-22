@@ -28,8 +28,8 @@ pub(crate) mod pairing;
 pub(crate) mod parking;
 pub(crate) mod width_policy;
 use parking::{
-    AdjacentDisplayParked, CompactParked, ParkingDisplay, compact_parking, legacy_parking,
-    should_park_at_seam, update_parking_state,
+    AdjacentDisplayParked, CompactParked, EdgePresentation, NativeMinimumWidth, ParkingDisplay,
+    compact_presentation, legacy_parking, update_legacy_parking_state, update_native_presentation,
 };
 
 /// The floor every window in a column is packed against. Heights that would
@@ -118,6 +118,8 @@ type RepositionedWindows<'w, 's> = Populated<
         Option<&'static ResizeMarker>,
         Has<AdjacentDisplayParked>,
         Has<CompactParked>,
+        Option<&'static EdgePresentation>,
+        Option<&'static NativeMinimumWidth>,
     ),
     (With<Window>, Without<LayoutStrip>),
 >;
@@ -1862,12 +1864,11 @@ fn presentation_context(
         if let Ok((display, dock)) = displays.get(child_of.parent()) {
             let height = display.actual_display_bounds(dock, config).height();
             let get_frame = |entity| {
-                positioned_windows
-                    .get(entity)
-                    .ok()
-                    .map(|(_, _, _, position, bounds, _, _, _)| {
+                positioned_windows.get(entity).ok().map(
+                    |(_, _, _, position, bounds, _, _, _, _, _)| {
                         IRect::from_corners(position.0, position.0 + bounds.0)
-                    })
+                    },
+                )
             };
             current_frames.extend(layout_strip.relative_positions(height, &get_frame));
         }
@@ -1916,8 +1917,18 @@ fn position_layout_windows(
         &config,
     );
 
-    for (entity, window, _, mut position, mut bounds, resize, was_parked, was_compact) in
-        positioned_windows
+    for (
+        entity,
+        window,
+        _,
+        mut position,
+        mut bounds,
+        resize,
+        was_parked,
+        was_compact,
+        previous_edge,
+        minimum_width,
+    ) in positioned_windows
     {
         let Some(context) = presentation.windows.get(&entity) else {
             continue;
@@ -1936,40 +1947,35 @@ fn position_layout_windows(
         frame.min += context.strip_position;
         frame.max += context.strip_position;
 
-        let fully_hidden = presentation.hidden.contains(&entity)
-            || frame.max.x <= viewport.min.x + h_pad
-            || frame.min.x >= viewport.max.x - h_pad;
         if config.compact_parking() {
-            let parked = fully_hidden
-                || should_park_at_seam(
-                    frame,
-                    viewport,
-                    display.bounds(),
-                    &connected_bounds,
-                    bevy::math::IVec2::new(h_pad, window.vertical_padding()),
+            let padding = bevy::math::IVec2::new(h_pad, window.vertical_padding());
+            let presentation = compact_presentation(
+                frame,
+                viewport,
+                display.bounds(),
+                &parking_displays,
+                padding,
+                (
                     focused.contains(entity),
-                );
-            let limit = parked.then(|| {
-                compact_parking(
-                    frame.size(),
-                    display.bounds(),
-                    &parking_displays,
-                    bevy::math::IVec2::new(h_pad, window.vertical_padding()),
-                )
-            });
-            if let Some(geometry) = limit {
-                frame = geometry.frame;
-            }
-            update_parking_state(
+                    presentation.hidden.contains(&entity),
+                ),
+                minimum_width.map_or(200, |m| m.0),
+            );
+            frame = presentation.frame;
+            let edge = presentation.edge;
+            let parked = presentation.parking_limit.is_some();
+            if update_native_presentation(
                 &mut commands,
                 entity,
-                limit.map(|geometry| geometry.size_limit),
+                &presentation,
+                previous_edge.copied(),
                 was_compact,
-            );
-            if was_compact && !parked {
+            ) {
                 bounds.set_changed();
             }
-            if resize.is_none() && bounds.0 != frame.size() {
+            // Clipping is native presentation only. Never feed its reduced width
+            // back into logical Bounds, WidthRatio or the preferred-width policy.
+            if edge.is_none() && !parked && resize.is_none() && bounds.0 != frame.size() {
                 bounds.0 = frame.size();
             }
             if position.0 != frame.min {
@@ -1979,8 +1985,10 @@ fn position_layout_windows(
             continue;
         }
 
-        if was_compact {
-            commands.entity(entity).try_remove::<CompactParked>();
+        if was_compact || previous_edge.is_some() {
+            commands
+                .entity(entity)
+                .try_remove::<(CompactParked, EdgePresentation)>();
             bounds.set_changed();
         }
         let (frame, rerouted) = legacy_parking(
@@ -1992,15 +2000,7 @@ fn position_layout_windows(
             h_pad,
             (context.swiping, context.stacked),
         );
-        if rerouted != was_parked
-            && let Ok(mut entity_commands) = commands.get_entity(entity)
-        {
-            if rerouted {
-                entity_commands.insert(AdjacentDisplayParked);
-            } else {
-                entity_commands.try_remove::<AdjacentDisplayParked>();
-            }
-        }
+        update_legacy_parking_state(&mut commands, entity, rerouted, was_parked);
 
         if resize.is_none() && bounds.0 != frame.size() {
             bounds.0 = frame.size();

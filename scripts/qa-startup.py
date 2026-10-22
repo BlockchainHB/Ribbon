@@ -87,6 +87,8 @@ try:
                             'tell application "System Events"',
                             'tell process "Ribbon"',
                             'set frontmost to true',
+                            'perform action "AXRaise" of window "General"',
+                            'delay 0.15',
                             'set nodes to entire contents of window "General"',
                             'repeat with node in nodes',
                             'try',

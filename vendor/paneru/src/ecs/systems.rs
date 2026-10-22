@@ -1,5 +1,5 @@
 use bevy::app::AppExit;
-use bevy::ecs::change_detection::{DetectChanges, DetectChangesMut};
+use bevy::ecs::change_detection::{DetectChanges, DetectChangesMut, Ref};
 use bevy::ecs::entity::{Entity, EntityHashMap};
 use bevy::ecs::hierarchy::{ChildOf, Children};
 use bevy::ecs::message::{MessageReader, MessageWriter};
@@ -25,7 +25,7 @@ use super::{
 
 use crate::config::{Config, decorations::BorderRadiusOption};
 use crate::ecs::display::FloatingLayer;
-use crate::ecs::layout::parking::CompactParked;
+use crate::ecs::layout::parking::{CompactParked, EdgePresentation, NativeMinimumWidth};
 use crate::ecs::layout::{Column, LayoutStrip};
 use crate::ecs::params::{ActiveDisplay, FrameActivity, Windows};
 use crate::ecs::{
@@ -57,12 +57,14 @@ type MovableWindows<'w, 's> = Query<
     'w,
     's,
     (
+        Entity,
         &'static mut Window,
         &'static mut Position,
         &'static Bounds,
         Option<&'static Unmanaged>,
         Has<RepositionMarker>,
         Has<CompactParked>,
+        Has<EdgePresentation>,
     ),
     Without<LayoutStrip>,
 >;
@@ -81,13 +83,32 @@ type ResizableWindows<'w, 's> = Query<
         Option<&'static Unmanaged>,
         Has<ResizeMarker>,
         Has<CompactParked>,
+        Has<EdgePresentation>,
     ),
     Without<LayoutStrip>,
 >;
 
+type MovingStrips<'w, 's> =
+    Query<'w, 's, &'static LayoutStrip, Or<(With<RepositionMarker>, With<Scrolling>)>>;
+
 // Parked native windows may be constrained to the parking display's size.
 // Only logical bounds animate there; commit native size when revealed again.
-type NativeResizeFilter = (Changed<Bounds>, Without<CompactParked>);
+type NativeResizeFilter = (
+    Or<(Changed<Bounds>, Changed<EdgePresentation>)>,
+    Without<CompactParked>,
+);
+
+type NativeSizeWindows<'w, 's> = Populated<
+    'w,
+    's,
+    (
+        &'static mut Window,
+        Ref<'static, Bounds>,
+        &'static mut WidthRatio,
+        Option<&'static EdgePresentation>,
+    ),
+    NativeResizeFilter,
+>;
 
 const LOOP_MAX_TIMEOUT_FRAME_ACTIVE_MS: u32 = 16;
 const LOOP_MAX_TIMEOUT_LOWPOWER_MS: u32 = 2000;
@@ -768,16 +789,22 @@ pub(crate) fn pump_events(
 pub(super) fn window_resized_update_frame(
     mut messages: MessageReader<Event>,
     mut windows: ResizableWindows,
-    mut workspaces: Query<(&LayoutStrip, &mut Position)>,
+    mut workspaces: Query<(
+        &LayoutStrip,
+        &mut Position,
+        Has<RepositionMarker>,
+        Has<Scrolling>,
+    )>,
 ) {
     for event in messages.read() {
         let Event::WindowResized { window_id } = event else {
             continue;
         };
 
-        let Some((mut window, entity, position, mut bounds, unmanaged, resizing, parked)) = windows
-            .iter_mut()
-            .find(|window| window.0.id() == *window_id)
+        let Some((mut window, entity, position, mut bounds, unmanaged, resizing, parked, clipped)) =
+            windows
+                .iter_mut()
+                .find(|window| window.0.id() == *window_id)
         else {
             continue;
         };
@@ -788,15 +815,21 @@ pub(super) fn window_resized_update_frame(
         // and `animate_resize_entities` is still stepping toward it, so reading
         // the echo in here would fight the animation producing that difference.
         // Only a resize we did not initiate is new information.
-        if resizing || parked {
+        let active_strip = workspaces
+            .iter_mut()
+            .find(|(strip, _, _, _)| strip.contains(entity));
+        if resizing
+            || parked
+            || clipped
+            || active_strip
+                .as_ref()
+                .is_some_and(|(_, _, moving, scrolling)| *moving || *scrolling)
+        {
             continue;
         }
         let Ok(new_frame) = window.update_frame() else {
             continue;
         };
-        let active_strip = workspaces
-            .iter_mut()
-            .find(|(strip, _)| strip.contains(entity));
         let tabbed = active_strip
             .as_ref()
             .is_some_and(|strip| strip.0.tabbed(entity));
@@ -811,7 +844,7 @@ pub(super) fn window_resized_update_frame(
         }
 
         // If the window was resized, shift LayoutStrip slightly to avoid moving right corner.
-        let Some((strip, mut strip_position)) = active_strip else {
+        let Some((strip, mut strip_position, _, _)) = active_strip else {
             // Floating window, don't nudge the strip.
             continue;
         };
@@ -821,7 +854,7 @@ pub(super) fn window_resized_update_frame(
             continue;
         }
 
-        if old_frame.min.x != new_frame.min.x {
+        if old_frame.min.x != new_frame.min.x && old_frame.width() != new_frame.width() {
             let shift = (old_frame.size() - new_frame.size()).with_y(0);
             // Search marke: reposition_entity - Updating position directly to reduce jitter.
             strip_position.0.x += shift.x;
@@ -832,7 +865,7 @@ pub(super) fn window_resized_update_frame(
         let diff = old_frame.min.y - new_frame.min.y;
         if diff.abs() > 0
             && let Some(above_entity) = strip.above(entity)
-            && let Ok((_, _, _, mut above_bounds, _, _, _)) = windows.get_mut(above_entity)
+            && let Ok((_, _, _, mut above_bounds, _, _, _, _)) = windows.get_mut(above_entity)
             && above_bounds.0.y - diff > 200
         {
             above_bounds.0.y -= diff;
@@ -844,15 +877,25 @@ pub(super) fn window_resized_update_frame(
 pub(crate) fn window_moved_update_frame(
     mut messages: MessageReader<Event>,
     mut windows: MovableWindows,
+    moving_strips: MovingStrips,
 ) {
     for event in messages.read() {
         let Event::WindowMoved { window_id } = event else {
             continue;
         };
 
-        let Some((mut window, mut position, bounds, unmanaged, repositioning, parked)) = windows
+        let Some((
+            entity,
+            mut window,
+            mut position,
+            bounds,
+            unmanaged,
+            repositioning,
+            parked,
+            clipped,
+        )) = windows
             .iter_mut()
-            .find(|window| window.0.id() == *window_id)
+            .find(|window| window.1.id() == *window_id)
         else {
             continue;
         };
@@ -862,7 +905,11 @@ pub(crate) fn window_moved_update_frame(
         // Our own move, echoed back: `animate_entities` lerps from the current
         // `Position`, so overwriting it with the echoed frame mid-animation
         // restarts each step from behind, and the two chase each other.
-        if repositioning || parked {
+        if repositioning
+            || parked
+            || clipped
+            || moving_strips.iter().any(|strip| strip.contains(entity))
+        {
             continue;
         }
         let Ok(new_frame) = window.update_frame() else {
@@ -1164,29 +1211,65 @@ pub(super) fn verify_window_position(
 /// Release space before neighbors move into it. Growth is committed after positions.
 #[instrument(level = Level::TRACE, skip_all)]
 pub(super) fn commit_window_shrink(
-    mut resized_windows: Populated<(&mut Window, &Bounds), NativeResizeFilter>,
+    mut resized_windows: Populated<
+        (
+            Entity,
+            &mut Window,
+            &mut Bounds,
+            &mut Position,
+            Option<&EdgePresentation>,
+        ),
+        NativeResizeFilter,
+    >,
+    mut commands: Commands,
 ) {
     resized_windows
         .par_iter_mut()
-        .for_each(|(mut window, bounds)| {
-            let size = window.frame().size().min(bounds.0);
+        .for_each(|(_, mut window, bounds, _, edge)| {
+            let target = edge.map_or(bounds.0, |edge| edge.frame.size());
+            let size = window.frame().size().min(target);
             if size != window.frame().size() {
                 objc2::rc::autoreleasepool(|_| window.resize(size));
             }
         });
+    for (entity, mut window, mut bounds, mut position, edge) in &mut resized_windows {
+        if let Some(edge) = edge
+            && window.frame().width() > edge.frame.width() + 1
+        {
+            // Some apps enforce a minimum width. Learn it and park before any
+            // reposition can expose an oversized body on the neighboring screen.
+            let minimum = window.frame().width();
+            let size = window.frame().size().min(edge.fallback.size_limit);
+            objc2::rc::autoreleasepool(|_| window.resize(size));
+            position.0 = edge.fallback.frame.min;
+            bounds.set_changed();
+            commands
+                .entity(entity)
+                .try_remove::<EdgePresentation>()
+                .try_insert((
+                    NativeMinimumWidth(minimum),
+                    CompactParked {
+                        size_limit: edge.fallback.size_limit,
+                    },
+                ));
+        }
+    }
 }
 
 #[instrument(level = Level::TRACE, skip_all)]
 pub(super) fn commit_window_size(
     active_display: ActiveDisplay,
-    mut resized_windows: Populated<(&mut Window, &Bounds, &mut WidthRatio), NativeResizeFilter>,
+    mut resized_windows: NativeSizeWindows,
 ) {
     let display_bounds = active_display.bounds();
     resized_windows
         .par_iter_mut()
-        .for_each(|(mut window, size, mut width_ratio)| {
-            width_ratio.0 = f64::from(size.0.x) / f64::from(display_bounds.width());
-            objc2::rc::autoreleasepool(|_| window.resize(size.0));
+        .for_each(|(mut window, bounds, mut width_ratio, edge)| {
+            if bounds.is_changed() {
+                width_ratio.0 = f64::from(bounds.0.x) / f64::from(display_bounds.width());
+            }
+            let target = edge.map_or(bounds.0, |edge| edge.frame.size());
+            objc2::rc::autoreleasepool(|_| window.resize(target));
         });
 }
 
@@ -1672,5 +1755,80 @@ mod tests {
         app.update();
 
         assert_eq!(tap_config.swipe_gesture_fingers(), Some(3));
+    }
+}
+
+#[cfg(test)]
+mod geometry_echo_tests {
+    use super::*;
+    use crate::tests::{TEST_WORKSPACE_ID, TestHarness, find_window_entity};
+
+    #[test]
+    fn strip_motion_ignores_native_echoes_but_accepts_manual_geometry_at_rest() {
+        let mut h = TestHarness::new().with_windows(2);
+        h.advance(Duration::from_millis(800));
+        let moved = h.world().register_system(window_moved_update_frame);
+        let resized = h.world().register_system(window_resized_update_frame);
+        let world = h.world();
+        let entity = find_window_entity(0, world);
+        let strip = world
+            .query::<(Entity, &LayoutStrip)>()
+            .iter(world)
+            .find(|(_, s)| s.id() == TEST_WORKSPACE_ID)
+            .unwrap()
+            .0;
+        let old_position = world.get::<Position>(entity).unwrap().0;
+        let old_bounds = world.get::<Bounds>(entity).unwrap().0;
+        world
+            .entity_mut(strip)
+            .insert(RepositionMarker(old_position));
+        h.mock_state.update_window(0, |w| {
+            w.frame = IRect::from_corners(
+                old_position + bevy::math::IVec2::splat(30),
+                old_position + old_bounds + bevy::math::IVec2::splat(60),
+            );
+        });
+        h.world().write_message(Event::WindowMoved { window_id: 0 });
+        h.world()
+            .write_message(Event::WindowResized { window_id: 0 });
+        h.world().run_system(moved).unwrap();
+        h.world().run_system(resized).unwrap();
+        assert_eq!(h.world().get::<Position>(entity).unwrap().0, old_position);
+        assert_eq!(h.world().get::<Bounds>(entity).unwrap().0, old_bounds);
+        h.world().entity_mut(strip).remove::<RepositionMarker>();
+        h.world().write_message(Event::WindowMoved { window_id: 0 });
+        h.world()
+            .write_message(Event::WindowResized { window_id: 0 });
+        h.world().run_system(moved).unwrap();
+        h.world().run_system(resized).unwrap();
+        assert_ne!(h.world().get::<Position>(entity).unwrap().0, old_position);
+        assert_ne!(h.world().get::<Bounds>(entity).unwrap().0, old_bounds);
+    }
+
+    #[test]
+    fn native_edge_changes_preserve_the_stored_width_ratio() {
+        let mut h = TestHarness::new().with_windows(1);
+        h.advance(Duration::from_millis(800));
+        let commit = h.world().register_system(commit_window_size);
+        let entity = find_window_entity(0, h.world());
+        // Prime change detection before deriving a presentation-only size.
+        h.world().get_mut::<Bounds>(entity).unwrap().set_changed();
+        h.world().run_system(commit).unwrap();
+        let frame = h.world().get::<Window>(entity).unwrap().frame();
+        h.world().get_mut::<WidthRatio>(entity).unwrap().0 = 0.75;
+        h.world().entity_mut(entity).insert(EdgePresentation {
+            frame: IRect::from_corners(frame.min, frame.min + frame.size().with_x(200)),
+            fallback: crate::ecs::layout::parking::ParkedGeometry {
+                frame,
+                size_limit: frame.size(),
+            },
+        });
+        h.world().run_system(commit).unwrap();
+        assert!((h.world().get::<WidthRatio>(entity).unwrap().0 - 0.75).abs() < f64::EPSILON);
+        assert_eq!(h.world().get::<Bounds>(entity).unwrap().0.x, frame.width());
+        assert_eq!(
+            h.world().get::<Window>(entity).unwrap().frame().width(),
+            200
+        );
     }
 }
