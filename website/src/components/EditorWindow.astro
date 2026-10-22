@@ -1,12 +1,14 @@
 ---
 import WindowChrome from './WindowChrome.astro';
-const lines = ['<section class="hero">', '  <h1>', '    Your agents,', '    right beside your work.', '  </h1>', '  <DownloadLink />', '</section>'];
+interface Props { compact?: boolean; }
+const { compact = false } = Astro.props;
+const lines = compact ? ['<h1>', '  Your agents,', '  right beside', '  your work.', '</h1>'] : ['<section class="hero">', '  <h1>', '    Your agents,', '    right beside your work.', '  </h1>', '  <DownloadLink />', '</section>'];
 ---
-<div class="example-window editor-window">
+<div class:list={['example-window', 'editor-window', { 'compact-editor': compact }]}>
   <WindowChrome title="IDE · Ribbon" />
   <div class="editor-content">
     <p class="editor-file"><span class="desktop-example">src / pages / </span>index.astro</p>
     <pre class="editor-code desktop-example">{lines.map((line, index) => <span class:list={['code-line', { 'code-copy': index === 2 || index === 3 }]}><span class="line-number">{String(index + 1).padStart(2, '0')}</span>{line}</span>)}</pre>
-    <pre class="editor-code mobile-example">{'<section>\n  <h1>\n    Your agents,\n    right beside\n    your work.\n  </h1>\n</section>'}</pre>
+    <pre class="editor-code mobile-example">{compact ? '<h1>\n  Your agents,\n  right beside\n  your work.\n</h1>' : '<section>\n  <h1>\n    Your agents,\n    right beside\n    your work.\n  </h1>\n</section>'}</pre>
   </div>
 </div>

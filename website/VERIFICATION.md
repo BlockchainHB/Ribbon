@@ -53,3 +53,18 @@ Public release preparation, 22 October: download and source links now come from 
 | LOW, fixed | `src/styles/scenes.css` mobile stack section | The new desktop section rule overrode mobile spacing. | Explicit mobile padding matches adjacent sections; terminal text stays 12 px. | Preserve the page's established density across breakpoints. |
 
 No actionable UI-polish findings remain in the inspected Chromium states. Safari, physical-phone performance, real background-tab visibility transitions, and 60/120 Hz frame-budget profiling are **not verified**. The in-app browser kept `document.hidden` false when another tab was brought forward, so that action is not counted as a visibility test. Native app behavior and hardware compatibility are unchanged by these website illustrations.
+
+
+## Unified hero revision — 22 October 2026
+
+- Replaced the three separate animated examples with one nine-second hero story: swipe a column, outline and move the editor/preview as a group, then stack Claude beneath the editor. Lower illustrations remain static. No new dependencies or native-app changes.
+- Larger travel distances, readable holds, and a taller stage make each action visible. One keyboard-accessible control supports Pause, Resume, and Replay.
+- `npm --prefix website run check`: passed with zero errors, warnings, or hints. `npm --prefix website run build`: passed. `scripts/verify.sh`: passed, including the engine checks and 26 Swift tests; log: `build/hero-story-product-verification.log`.
+- Chromium review at observed CSS widths 320, 390, 1025, 1440, and desktop 1756: no horizontal document overflow. Completed editor and Claude content fit their tiles. Device emulation is not physical-device testing.
+- Inspected ten desktop frames and six mobile frames across swipe, grouping, and stacking. No visible window intersections; grouped windows preserve their gap (approximately 12 px desktop, 10 px mobile). Claude hides during the mobile group crossing, then enters the vacant lower tile. The final stack shares its left edge and width, beside a full-height preview.
+- Enter pauses all eight product timelines without advancing across eight animation frames, then resumes them. Offscreen playback likewise pauses all eight timelines without advancing and resumes on return. Playback completes once, with explicit replay.
+- Initial and live reduced-motion checks produce zero animations, a completed stack, and a hidden control. With JavaScript disabled, the static hero remains visible with no control or document overflow. Width changes settle the active sequence into valid final geometry.
+- No browser warnings or errors captured. Device metrics, script-execution overrides, and media emulation were cleared; the normal preview was reloaded.
+- Evidence: `build/qa/hero-story/verification.json`, `desktop-group.png`, `mobile-group.png`, and `mobile-stack.png`.
+
+Safari, physical phones, real background-tab visibility transitions, and frame-rate profiling remain unverified. The release archive and native window-management behavior are unchanged. This revision is verified in the local production preview; no website deployment is claimed.

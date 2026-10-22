@@ -1,9 +1,11 @@
 # Ribbon website motion study and implementation plan
 
 Status: implemented on 22 October 2026; verification is recorded in `website/VERIFICATION.md`.
+
+**Current direction, revised 22 October:** the user found the separate demonstrations too weak and requested that the first/main illustration show swipe → group → stack. Only the hero now animates. Its larger nine-second sequence swipes one column, outlines and reorders the editor/preview pair, then stacks Claude beneath the editor and fills the remaining width. A single control pauses/resumes playback and becomes Replay at completion; reduced motion shows the final stack without a control. Lower illustrations stay static. `HeroScene.astro` and `hero.css` own the primary illustration; `scene-motion.ts` owns its single timeline and lifecycle. The separate-scene storyboards below remain research history, not the current implementation target.
 Studied: 22 October 2026. Website baseline: `b44a56ba450913d1fdce171b070317101af0fef4`.
 
-Implementation notes: the three demos progressively enhance the existing Astro illustrations without new dependencies. Stacking uses a 350 ms shell resize followed by a 450 ms entry into the vacant lower tile, rather than simultaneous crossing, to prevent collisions. The travel/feedback curves live together in `website/src/scripts/scene-motion.ts`. Replay controls are omitted in reduced motion; static frames provide the explanation. Very short viewports use half the viewport height as the visibility threshold so a tall scene can still play. Overview, design, displays, headings, and footer remain still.
+Historical implementation notes (superseded by the hero revision above): the three demos progressively enhance the existing Astro illustrations without new dependencies. Stacking uses a 350 ms shell resize followed by a 450 ms entry into the vacant lower tile, rather than simultaneous crossing, to prevent collisions. The travel/feedback curves live together in `website/src/scripts/scene-motion.ts`. Replay controls are omitted in reduced motion; static frames provide the explanation. Very short viewports use half the viewport height as the visibility threshold so a tall scene can still play. Overview, design, displays, headings, and footer remain still.
 
 ## Recommendation
 

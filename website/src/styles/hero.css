@@ -1,0 +1,39 @@
+/* One continuous hero story: swipe → group → stack. */
+.hero-stage { display:block; height:460px; padding:18px; border:1px solid var(--line); border-radius:28px; background:var(--porcelain); --hero-a:36%; --hero-b:36%; --hero-c:29%; --hero-d:34%; --hero-gap:12px; }
+.hero-stage .scene-viewport { height:100%; }
+.hero-track { position:relative; width:100%; height:100%; }
+.hero-slot { position:absolute; top:0; height:100%; contain:layout; }
+.hero-agent { left:0; width:var(--hero-a); }
+.hero-editor { left:calc(var(--hero-a) + var(--hero-gap)); width:var(--hero-b); }
+.hero-preview { left:calc(var(--hero-a) + var(--hero-b) + var(--hero-gap)*2); width:var(--hero-c); }
+.hero-companion { left:calc(var(--hero-a) + var(--hero-b) + var(--hero-c) + var(--hero-gap)*3); width:var(--hero-d); }
+.hero-stage .hero-slot>.example-window { width:100%; height:100%; }
+.hero-companion-content { display:flex; flex-direction:column; gap:12px; padding:18px; }
+.hero-companion-content>p:last-child { font-size:14px; line-height:22px; color:var(--muted); }
+.hero-group-outline { position:absolute; left:calc(var(--hero-a) + var(--hero-gap)); top:0; width:calc(var(--hero-b) + var(--hero-c) + var(--hero-gap)); height:100%; border:2px solid var(--cobalt); border-radius:12px; opacity:0; pointer-events:none; z-index:2; }
+.compact-editor .editor-content { padding:12px; gap:10px; }
+.compact-editor .editor-file { font-size:12px; line-height:18px; }
+.compact-editor .editor-code { font-size:13px; line-height:21px; }
+.compact-editor .line-number { width:28px; }
+.hero-demo-captions { display:grid; place-items:center; height:24px; margin-top:16px; padding-inline:44px; color:var(--muted); font-size:14px; line-height:22px; text-align:center; }
+.hero-demo-captions>span { grid-area:1/1; }
+.hero-demo-captions>span:not(:first-child) { opacity:0; }
+.scene-replay [data-icon] { opacity:0; transition:opacity 150ms var(--press); }
+.scene-replay[data-control="pause"] [data-icon="pause"],.scene-replay[data-control="play"] [data-icon="play"],.scene-replay[data-control="replay"] [data-icon="replay"] { opacity:1; }
+@media(max-width:760px) {
+  .hero-stage { height:374px; padding:12px; border-radius:22px; --hero-a:46%; --hero-b:44%; --hero-c:41%; --hero-d:46%; --hero-gap:10px; }
+  .hero-stage .scene-viewport,.hero-group-outline { border-radius:8px; }
+  .hero-stage .example-window { border:0; border-radius:8px; box-shadow:none; }
+  .hero-stage .agent-content { padding:16px 12px; }
+  .hero-stage .preview-content { padding:24px 10px; gap:16px; }
+  .hero-stage .preview-content>img { width:30px; height:30px; }
+  .hero-stage .preview-content>p { font-size:15px; line-height:18px; }
+  .hero-stage .illustrative-download { padding:5px 8px; font-size:10px; }
+  .hero-companion-content { padding:12px; gap:8px; }
+  .hero-companion-content .agent-task { font-size:14px; line-height:20px; }
+  .hero-companion-content>p:last-child { font-size:12px; line-height:18px; }
+  .compact-editor .editor-content { padding:12px 10px; gap:8px; }
+  .compact-editor .editor-file { font-size:10px; line-height:16px; }
+  .compact-editor .editor-code { font-size:11px; line-height:18px; }
+  .hero-demo-captions { height:22px; font-size:12px; line-height:20px; }
+}
