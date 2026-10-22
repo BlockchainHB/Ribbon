@@ -132,6 +132,9 @@ final class FixtureDelegate: NSObject, NSApplicationDelegate {
     window.setFrame(
       NSWindow.frameRect(forContentRect: initialContent, styleMask: window.styleMask), display: true
     )
+    if !sentinel && CommandLine.arguments.contains("--maximized-startup") {
+      window.setFrame(bounds, display: true)
+    }
     window.makeKeyAndOrderFront(nil)
     windows.append(window)
     writeReport()

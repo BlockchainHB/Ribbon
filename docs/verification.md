@@ -309,3 +309,53 @@ supersedes the earlier toolbar study. The scoped audit is in [ui-audit.md](ui-au
 Use a fresh output directory, exactly two displays, and no running Ribbon
 instance. The runner restores and closes only its disposable test windows.
 No unrestricted engine is used during automated QA.
+
+
+## Maximized startup visibility regression — 22 October 2026
+
+A native maximized window is wider than Ribbon's padded tile viewport. On adjacent
+monitors, compact-parking seam protection could classify even the focused window
+as crossing into its neighbor and move it to the outer parking corner. Activating
+that window again repeated the same decision. Claude and Codex were still running.
+
+The engine now fits an oversized column to its own monitor's usable width when
+adopting it. If an app refuses to fit because of its minimum size, a visible focused
+oversized column stays reachable. Genuinely hidden windows still park, and the
+pre-session recovery journal retains their original native frames.
+
+A focused regression failed before the fix and passed afterward. Coverage includes
+maximized startup on differently sized adjacent monitors, external focus, and
+returning to an explicitly oversized column. The upstream non-compact behavior is
+preserved. Logs: `build/startup-regression-before.log`,
+`build/startup-regression-after.log`, and `build/startup-fix-verification.log`.
+
+The isolated hardware runner is `scripts/qa-startup.py`; it launches only the
+fixture allowlist using fresh QA storage, leaving personal application windows
+outside the engine scope. Its maximized fixtures exercise startup, external reveal,
+pause/recovery, and restart. Hardware results are recorded separately below.
+
+
+Final optimized, certificate-signed hardware run:
+`build/qa/startup-fix-20261022-8/summary.json` — **passed**, with nine native checks
+in the single-strip run and nine in the dual-monitor run. Four maximized fixture
+windows were revealed individually in the first run, and all eight across the
+2560 × 1440 external monitor and 1728 × 1117 built-in display in the second.
+The excluded sentinel stayed unchanged; pause restored original frames; restart
+and a second pause completed without retained recovery data. Menu opening and
+the real settings switch were exercised through external native automation.
+Earlier failed receipts remain in runs 1–7; they stopped at automation setup or
+switch activation before testing the geometry. The final driver reads the actual
+switch's external AX bounds and clicks its center from a separate process.
+
+`scripts/verify.sh` passed: formatting, Clippy, 485 default-feature engine tests,
+402 no-default-feature engine tests, library tests, and 26 Swift tests. Build and
+signature verification passed. The hardware-tested engine SHA-256
+`ebcccd2e4f7f434e2f525e27f877c6ac6c47fea67688eefc3075e348600e197d`
+matches the installed `/Users/neat/Applications/Ribbon.app` executable. The app is
+left paused; no unrestricted engine was started for QA and no personal Claude or
+Codex session was rearranged as a test. Public GitHub release assets were not
+replaced.
+
+Reproduce the isolated startup checks, with two displays and Ribbon quit:
+
+    python3 scripts/qa-startup.py "$HOME/Applications/Ribbon.app" "$PWD/build/qa/fresh-startup-run"

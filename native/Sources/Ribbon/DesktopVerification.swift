@@ -119,7 +119,10 @@ enum DesktopVerification {
           && state.windows.allSatisfy { $0.bundleID == RibbonSettings.fixtureBundleID }
       }
       report.checks.append(Check(name: "start and exact application scope", passed: true))
-      if CommandLine.arguments.contains("--qa-pairing") {
+      if CommandLine.arguments.contains("--qa-maximized-startup") {
+        try await verifyMaximizedStartup(
+          controller, fixture: fixture, original: original, report: &report)
+      } else if CommandLine.arguments.contains("--qa-pairing") {
         try await verifyPairing(controller, fixture: fixture, report: &report)
       } else if CommandLine.arguments.contains("--qa-motion") {
         try await verifyMotion(controller, fixture: fixture, report: &report)

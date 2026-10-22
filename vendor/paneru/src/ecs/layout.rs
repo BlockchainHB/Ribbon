@@ -28,8 +28,8 @@ pub(crate) mod pairing;
 pub(crate) mod parking;
 pub(crate) mod width_policy;
 use parking::{
-    AdjacentDisplayParked, CompactParked, ParkingDisplay, compact_parking, crosses_display_seam,
-    legacy_parking, update_parking_state,
+    AdjacentDisplayParked, CompactParked, ParkingDisplay, compact_parking, legacy_parking,
+    should_park_at_seam, update_parking_state,
 };
 
 /// The floor every window in a column is packed against. Heights that would
@@ -1902,14 +1902,12 @@ fn position_layout_windows(
     workspaces: StripsForWindowPositioning,
     snap_guards: Query<&SnapStripMarker>,
     displays: DisplayViewports,
+    focused: Query<Entity, With<super::FocusedMarker>>,
     config: Res<Config>,
     mut commands: Commands,
 ) {
     let parking_displays = collect_parking_displays(&displays, &config);
-    let connected_bounds = parking_displays
-        .iter()
-        .map(|d| d.bounds)
-        .collect::<Vec<_>>();
+    let connected_bounds: Vec<_> = parking_displays.iter().map(|d| d.bounds).collect();
     let presentation = presentation_context(
         &positioned_windows,
         &workspaces,
@@ -1943,11 +1941,13 @@ fn position_layout_windows(
             || frame.min.x >= viewport.max.x - h_pad;
         if config.compact_parking() {
             let parked = fully_hidden
-                || crosses_display_seam(
+                || should_park_at_seam(
                     frame,
+                    viewport,
                     display.bounds(),
                     &connected_bounds,
                     bevy::math::IVec2::new(h_pad, window.vertical_padding()),
+                    focused.contains(entity),
                 );
             let limit = parked.then(|| {
                 compact_parking(

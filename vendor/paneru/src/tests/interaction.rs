@@ -3789,3 +3789,166 @@ fn held_swipe_tracks_input_once_and_accumulates_fractional_points() {
     assert!((scroll.position - expected).abs() < 0.000_001);
     assert_eq!(position.x, crate::util::round_px(expected));
 }
+
+#[test]
+fn compact_parking_keeps_maximized_startup_windows_reachable_beside_another_display() {
+    let mut params = WindowParams::new(".*", None);
+    params.horizontal_padding = Some(6);
+    params.vertical_padding = Some(6);
+    let config: Config = (
+        MainOptions {
+            compact_parking: Some(true),
+            padding_left: Some(6),
+            padding_right: Some(6),
+            ..Default::default()
+        },
+        vec![params],
+    )
+        .into();
+    TestHarness::new()
+        .with_config(config)
+        .with_display(
+            EXT_DISPLAY_ID,
+            IRect::new(
+                TEST_DISPLAY_WIDTH,
+                0,
+                TEST_DISPLAY_WIDTH + EXT_DISPLAY_WIDTH,
+                EXT_DISPLAY_HEIGHT,
+            ),
+            vec![EXT_WORKSPACE_ID],
+        )
+        .with_window(0, |w| {
+            w.frame = IRect::new(
+                0,
+                TEST_MENUBAR_HEIGHT,
+                TEST_DISPLAY_WIDTH,
+                TEST_DISPLAY_HEIGHT,
+            );
+        })
+        .with_window(1, |w| {
+            w.frame = IRect::new(
+                0,
+                TEST_MENUBAR_HEIGHT,
+                TEST_DISPLAY_WIDTH,
+                TEST_DISPLAY_HEIGHT,
+            );
+        })
+        .with_workspace_window(100, EXT_WORKSPACE_ID, |w| {
+            w.frame = IRect::new(
+                TEST_DISPLAY_WIDTH,
+                TEST_MENUBAR_HEIGHT,
+                TEST_DISPLAY_WIDTH + EXT_DISPLAY_WIDTH,
+                EXT_DISPLAY_HEIGHT,
+            );
+        })
+        .on_iteration(0, |world, _| {
+            // The second monitor has a different width. Initial fitting must
+            // use each tile's owner rather than the currently active display.
+            assert_window_size!(
+                world,
+                100,
+                EXT_DISPLAY_WIDTH - 12,
+                EXT_DISPLAY_HEIGHT - TEST_MENUBAR_HEIGHT
+            );
+        })
+        .on_iteration(1, |world, state| {
+            let entity = find_window_entity(0, world);
+            assert_window_size!(
+                world,
+                0,
+                TEST_DISPLAY_WIDTH - 12,
+                TEST_DISPLAY_HEIGHT - TEST_MENUBAR_HEIGHT
+            );
+            assert_focused!(world, 0);
+            assert!(
+                world
+                    .get::<crate::ecs::layout::parking::CompactParked>(entity)
+                    .is_none(),
+                "a focused maximized window must never be parked at the other monitor's corner"
+            );
+            state.set_focused_window(1);
+        })
+        .on_iteration(2, |world, _| {
+            let entity = find_window_entity(1, world);
+            assert_focused!(world, 1);
+            assert!(
+                world
+                    .get::<crate::ecs::layout::parking::CompactParked>(entity)
+                    .is_none(),
+                "external app activation must reveal a maximized tile"
+            );
+        })
+        .run(vec![
+            Event::MenuOpened { window_id: 0 },
+            Event::Command {
+                command: Command::Window(Operation::Focus(Direction::First)),
+            },
+            Event::WindowFocused { window_id: 1 },
+        ]);
+}
+
+#[test]
+fn compact_parking_does_not_hide_a_focused_oversized_tile() {
+    let config: Config = (
+        MainOptions {
+            compact_parking: Some(true),
+            ..Default::default()
+        },
+        vec![],
+    )
+        .into();
+    TestHarness::new()
+        .with_config(config)
+        .with_display(
+            EXT_DISPLAY_ID,
+            IRect::new(
+                TEST_DISPLAY_WIDTH,
+                0,
+                TEST_DISPLAY_WIDTH + EXT_DISPLAY_WIDTH,
+                EXT_DISPLAY_HEIGHT,
+            ),
+            vec![EXT_WORKSPACE_ID],
+        )
+        .with_windows(2)
+        .on_iteration(1, |world, state| {
+            let entity = find_window_entity(0, world);
+            assert_focused!(world, 0);
+            assert_window_size!(
+                world,
+                0,
+                TEST_DISPLAY_WIDTH * 2,
+                TEST_DISPLAY_HEIGHT - TEST_MENUBAR_HEIGHT
+            );
+            assert!(
+                world
+                    .get::<crate::ecs::layout::parking::CompactParked>(entity)
+                    .is_none(),
+                "a focused tile that cannot fit must remain reachable"
+            );
+            state.set_focused_window(1);
+        })
+        .on_iteration(2, |world, state| {
+            assert_focused!(world, 1);
+            state.set_focused_window(0);
+        })
+        .on_iteration(3, |world, _| {
+            let entity = find_window_entity(0, world);
+            assert_focused!(world, 0);
+            assert!(
+                world
+                    .get::<crate::ecs::layout::parking::CompactParked>(entity)
+                    .is_none(),
+                "external activation must recover an oversized tile too"
+            );
+        })
+        .run(vec![
+            Event::Command {
+                command: Command::Window(Operation::Focus(Direction::First)),
+            },
+            Event::Command {
+                command: Command::Window(Operation::SetWidth(2.0)),
+            },
+            Event::WindowFocused { window_id: 1 },
+            Event::WindowFocused { window_id: 0 },
+        ]);
+}

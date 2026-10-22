@@ -10,6 +10,15 @@ The upstream default-feature test suite is also retained.
 
 Local changes:
 
+- Startup visibility: fit newly adopted oversized tiled columns to their own
+  monitor's usable width when compact parking is enabled. Native maximized
+  windows otherwise exceed the viewport after padding and can be parked at
+  the neighboring screen's corner even when focused. Seam protection keeps a
+  focused oversized tile reachable if the application refuses to fit; hidden
+  and inactive tiles still park normally. Regression coverage includes
+  differently sized adjacent displays, external focus, and explicit oversized
+  windows. The native recovery journal retains the original pre-session size.
+
 - `ribbon.rs`: explicit all-app policy with exact exclusions, legacy/QA bundle-ID allowlists,
   fail-closed invalid policies, parent lifetime
   watchdog, and original-frame recovery geometry with focused tests.

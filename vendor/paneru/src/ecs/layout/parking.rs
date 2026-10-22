@@ -126,6 +126,20 @@ pub(super) fn crosses_display_seam(
         .any(|other| *other != owner && intersection_area(native, *other) > 0)
 }
 
+/// App minimum sizes can exceed a monitor. Keep a visible focused tile
+/// reachable instead of parking it again whenever the user activates it.
+pub(super) fn should_park_at_seam(
+    frame: IRect,
+    viewport: IRect,
+    owner: IRect,
+    displays: &[IRect],
+    padding: IVec2,
+    focused: bool,
+) -> bool {
+    !(focused && frame.size().cmpgt(viewport.size()).any())
+        && crosses_display_seam(frame, owner, displays, padding)
+}
+
 fn intersection_area(a: IRect, b: IRect) -> i64 {
     let size = (a.max.min(b.max) - a.min.max(b.min)).max(IVec2::ZERO);
     i64::from(size.x) * i64::from(size.y)

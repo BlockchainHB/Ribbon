@@ -1166,6 +1166,7 @@ pub(super) fn spawn_window_trigger(
 pub(super) fn apply_window_defaults(
     mut windows: WindowDefaultsQueries,
     apps: Query<(Entity, &Application)>,
+    displays: Query<(&Display, Option<&DockPosition>)>,
     active_display: ActiveDisplay,
     config: Res<Config>,
     initializing: Option<Res<Initializing>>,
@@ -1206,12 +1207,28 @@ pub(super) fn apply_window_defaults(
             width_ratio.0 = f64::from(frame.width()) / display_width;
         }
 
-        // Apply configured width AFTER update_frame so it isn't overwritten.
-        // WidthRatio and commit_window_size use the display's raw bounds.
-        // Safe during init: this only resizes, it doesn't reposition, so a
-        // window on an inactive display stays put.
-        if let Some(width) = properties.width_ratio(focused_ratio) {
-            let new_width = round_px(display_width * width);
+        // A maximized native window plus tile padding can exceed its usable
+        // display. Fit it once when adopting it; otherwise seam protection can
+        // park every such column, including the one we are trying to reveal.
+        // Use this window's monitor, not the monitor hosting the active app.
+        let requested_width = properties
+            .width_ratio(focused_ratio)
+            .map_or(window.frame().width(), |width| {
+                round_px(display_width * width)
+            });
+        let new_width = if config.compact_parking() {
+            let viewport = displays
+                .iter()
+                .find(|(display, _)| display.bounds().contains(window.frame().center()))
+                .map_or_else(
+                    || active_display.actual_bounds(&config),
+                    |(display, dock)| display.actual_display_bounds(dock, &config),
+                );
+            requested_width.min(viewport.width().max(1))
+        } else {
+            requested_width
+        };
+        if new_width != window.frame().width() {
             let height = window.frame().height();
             window.resize(Size::new(new_width, height));
             // Re-read the actual OS size: the app may enforce a minimum width

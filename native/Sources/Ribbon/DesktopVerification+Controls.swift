@@ -32,6 +32,21 @@ extension DesktopVerification {
     AXValueGetValue(origin as! AXValue, .cgPoint, &p)
     AXValueGetValue(size as! AXValue, .cgSize, &s)
     let point = CGPoint(x: p.x + s.width / 2, y: p.y + s.height / 2)
+    if CommandLine.arguments.contains("--qa-maximized-startup"),
+      CommandLine.arguments.contains("--qa-external-input"),
+      let index = CommandLine.arguments.firstIndex(of: "--qa-output")
+    {
+      let directory = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+        .deletingLastPathComponent()
+      let request = directory.appendingPathComponent("switch-request-\(UUID().uuidString).json")
+      try JSONSerialization.data(withJSONObject: ["running": running]).write(
+        to: request, options: .atomic)
+      defer { try? FileManager.default.removeItem(at: request) }
+      try await eventually("External accessibility switch activation") {
+        controller.phase == (running ? .running : .stopped)
+      }
+      return
+    }
     controlClick(point)
     try await eventually(running ? "Native switch starts Ribbon" : "Native switch pauses Ribbon") {
       controller.phase == (running ? .running : .stopped)

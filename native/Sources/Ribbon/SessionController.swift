@@ -205,6 +205,9 @@ final class SessionController: ObservableObject {
     config.activates = true
     if let report { config.arguments = ["--report", report.path] }
     if dualDisplays { config.arguments.append("--dual-displays") }
+    if CommandLine.arguments.contains("--qa-maximized-startup") {
+      config.arguments.append("--maximized-startup")
+    }
     _ = try await NSWorkspace.shared.openApplication(at: fixtureURL, configuration: config)
     refreshApps()
   }
