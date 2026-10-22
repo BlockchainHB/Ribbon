@@ -3,11 +3,20 @@ import AgentWindow from './AgentWindow.astro';
 import EditorWindow from './EditorWindow.astro';
 import PreviewWindow from './PreviewWindow.astro';
 import DesignWindow from './DesignWindow.astro';
+import MotionDemo from './MotionDemo.astro';
 interface Props { variant?: 'hero' | 'coding' | 'design'; }
 const { variant = 'hero' } = Astro.props;
 ---
-<div class:list={['workspace-scene', variant === 'hero' ? 'hero-stage' : 'pair-scene', { 'design-scene': variant === 'design' }]} aria-hidden="true">
-  <AgentWindow design={variant === 'design'} />
-  {variant === 'design' ? <DesignWindow /> : <EditorWindow />}
-  {variant === 'hero' && <><PreviewWindow /><AgentWindow continuation /></>}
-</div>
+{variant === 'design' ? (
+  <div class="workspace-scene pair-scene design-scene" aria-hidden="true"><AgentWindow design /><DesignWindow /></div>
+) : (
+  <MotionDemo kind={variant === 'hero' ? 'slide' : 'pair'} label={variant === 'hero' ? 'sliding' : 'pairing'}>
+    <div class:list={['workspace-scene', variant === 'hero' ? 'hero-stage' : 'pair-scene pair-demo']} aria-hidden="true">
+      <div class="scene-viewport" data-viewport>
+        <div class="workspace-track" data-track>
+          {variant === 'hero' ? <><AgentWindow /><EditorWindow /><PreviewWindow /><AgentWindow continuation /></> : <><div class="window-pair" data-pair><AgentWindow /><EditorWindow /></div><PreviewWindow /></>}
+        </div>
+      </div>
+    </div>
+  </MotionDemo>
+)}

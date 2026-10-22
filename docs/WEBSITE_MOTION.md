@@ -1,7 +1,9 @@
 # Ribbon website motion study and implementation plan
 
-Status: researched and planned; website motion is not implemented.
+Status: implemented on 22 October 2026; verification is recorded in `website/VERIFICATION.md`.
 Studied: 22 October 2026. Website baseline: `b44a56ba450913d1fdce171b070317101af0fef4`.
+
+Implementation notes: the three demos progressively enhance the existing Astro illustrations without new dependencies. Stacking uses a 350 ms shell resize followed by a 450 ms entry into the vacant lower tile, rather than simultaneous crossing, to prevent collisions. The travel/feedback curves live together in `website/src/scripts/scene-motion.ts`. Replay controls are omitted in reduced motion; static frames provide the explanation. Very short viewports use half the viewport height as the visibility threshold so a tall scene can still play. Overview, design, displays, headings, and footer remain still.
 
 ## Recommendation
 

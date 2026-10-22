@@ -31,3 +31,25 @@ Public release preparation, 22 October: download and source links now come from 
 - Agent-app FAQ expands and collapses with Enter and explains window management versus session integrations. No browser warnings or errors captured.
 - Screenshot evidence: `build/qa/agent-first/desktop.png`, `desktop-hero.png`, and `mobile.png`. Browser device emulation was cleared after review.
 - Existing release URLs are preserved; this website change does not replace the native release archive. GitHub Pages is not configured for this repository. The website is verified locally; no public site deployment, physical-phone test, Safari review or native-app hardware test is claimed.
+
+## Product motion — 22 October 2026
+
+- Added separate, once-per-view demonstrations for sliding, paired block reordering, and vertical stacking. Headings, overview, design example, displays, and footer remain still. No new dependencies.
+- `npm run check`: passed, 0 errors, warnings, or hints. `npm run build`: passed. `git diff --check`: passed.
+- `scripts/verify.sh`: passed; engine configurations and 26 Swift tests passed. Log: `build/website-motion-product-verification.log`. No unrestricted engine or native desktop QA was launched.
+- Chromium review at observed CSS widths 320, 390, 767, 1024, and 1440: no horizontal document overflow. The new section retains 40 px mobile padding, 48 px tablet padding, and 80 px desktop padding. Mobile terminal text remains 12 px and fits its tile.
+- Inspected six intermediate stacking frames: no browser/terminal intersection, and text transforms retain scale 1 throughout. At completion, a full-height agent sits beside two equal-height tiles, separated by 12 px on desktop and 8 px on mobile. Browser and terminal content fit the completed mobile tiles.
+- Inspected paired movement at four timeline positions: both widths stay constant, and the internal gap stays within 0.1 px of its starting value. The pair moves in lockstep; the unrelated window crossfades during crossing.
+- Keyboard Enter activates replay. Ten rapid replay requests recover to one sequence without queuing. Offscreen timelines pause without advancing and resume on return. Only one scene runs at a time.
+- Live reduced-motion preference change cancels all timelines after the media-query event is delivered; initial reduced motion creates no animations. Replay controls are hidden in this mode. With JavaScript disabled, scenes remain visible and meaningful, including the finished stack; replay controls remain hidden.
+- A 390-to-1440 px change during playback cancels motion and settles into valid geometry without page overflow. A 119 px-high viewport still starts one eligible scene. Idle scenes remeasure their initial geometry on width changes.
+- No browser warnings or errors captured in the final review. Temporary device metrics, media preferences, and script-execution overrides were cleared.
+- Home-page JavaScript bundle: 6043 bytes, 2153 bytes gzip at the recorded build. These are transfer sizes, not a frame-rate benchmark.
+- Evidence: `build/qa/website-motion/implementation/verification.json`, `desktop-stacking.png`, `mobile-stacking.png`, and `mobile-static.png`.
+
+| Severity | Location | Before | After | Why |
+| --- | --- | --- | --- | --- |
+| MEDIUM, fixed | `src/styles/scenes.css` stack browser content | The full three-line headline exceeded the shortened tile's content area. | Adjusted padding and line-height so the entire heading fits. | Resizing must preserve readable content. |
+| LOW, fixed | `src/styles/scenes.css` mobile stack section | The new desktop section rule overrode mobile spacing. | Explicit mobile padding matches adjacent sections; terminal text stays 12 px. | Preserve the page's established density across breakpoints. |
+
+No actionable UI-polish findings remain in the inspected Chromium states. Safari, physical-phone performance, real background-tab visibility transitions, and 60/120 Hz frame-budget profiling are **not verified**. The in-app browser kept `document.hidden` false when another tab was brought forward, so that action is not counted as a visibility test. Native app behavior and hardware compatibility are unchanged by these website illustrations.

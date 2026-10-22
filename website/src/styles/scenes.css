@@ -1,5 +1,13 @@
 /* Editable illustrations translated from the approved agent-first Paper artboards. */
 .workspace-scene { display:flex; gap:12px; overflow:hidden; }
+.motion-demo { position:relative; min-width:0; }
+.scene-viewport { position:relative; width:100%; min-width:0; overflow:hidden; border-radius:12px; }
+.workspace-track { position:relative; display:flex; gap:12px; width:100%; height:100%; }
+.hero-stage .scene-viewport { height:368px; }
+.scene-replay { position:absolute; right:0; bottom:-44px; display:flex; align-items:center; justify-content:center; width:44px; height:44px; padding:0; border:0; border-radius:50%; background:transparent; color:var(--muted); transition:color 150ms var(--press),transform 150ms var(--press); }
+.scene-replay[hidden] { display:none; }
+.scene-replay:active { transform:scale(.96); }
+@media(hover:hover) and (pointer:fine) { .scene-replay:hover { color:var(--cobalt); } }
 .hero-stage { height:402px; padding:16px; border:1px solid var(--line); border-radius:28px; background:var(--porcelain); }
 .example-window { display:flex; flex-direction:column; flex-shrink:0; min-width:0; background:#fff; border:1px solid #dcdde2; border-radius:12px; overflow:hidden; box-shadow:0 4px 12px #20242c08; }
 .hero-stage .example-window { height:368px; }
@@ -32,6 +40,33 @@
 .pair-scene .agent-window { flex:1 1 0; }
 .pair-scene .editor-window { flex:2 1 0; }
 .pair-scene .agent-status { display:none; }
+.pair-demo .scene-viewport { height:328px; }
+.window-pair { position:relative; display:flex; gap:12px; flex:0 0 calc(100% - 80px); min-width:0; z-index:1; }
+.pair-demo .preview-window { flex:0 0 176px; }
+.pair-demo .preview-content { padding:36px 12px; }
+.pair-demo .preview-content>p { font-size:22px; line-height:26px; }
+.pair-demo .agent-prompt { display:none; }
+.pair-demo .agent-content { padding:20px 16px; }
+.pair-demo .agent-reply { color:var(--muted); }
+.pair-demo .editor-content { padding-inline:16px; }
+.pair-demo .editor-code { font-size:12px; }
+.pair-demo .line-number { width:28px; }
+.stack-feature { grid-template-columns:minmax(0,360fr) minmax(0,728fr); padding-block:80px; }
+.stack-scene { height:424px; padding:48px 28px; background:var(--porcelain); border-radius:24px; }
+.stack-workspace { height:328px; --stack-gap:12px; --agent-share:36%; }
+.stack-workspace .example-window { position:absolute; height:100%; contain:layout paint; }
+.stack-workspace>.agent-window { width:var(--agent-share); left:0; top:0; }
+.stack-workspace .agent-prompt,.stack-workspace .agent-status { display:none; }
+.stack-workspace .agent-content { padding:20px 16px; }
+.stack-workspace .stack-browser,.stack-workspace .stack-terminal { left:calc(var(--agent-share) + var(--stack-gap)); width:calc(100% - var(--agent-share) - var(--stack-gap)); height:calc((100% - var(--stack-gap))/2); }
+.stack-browser { top:0; }
+.stack-terminal { top:calc((100% + var(--stack-gap))/2); }
+.stack-browser-content { padding:12px 16px; }
+.stack-site-name { display:block; color:var(--muted); font-size:11px; line-height:16px; margin-bottom:6px; }
+.stack-browser-content p { font:500 20px/22px var(--display); letter-spacing:-.02em; }
+.stack-terminal-content { margin:0; padding:14px 18px; white-space:pre; color:var(--ink); font:12px/19px ui-monospace,monospace; }
+.stack-terminal-content>span:first-child { color:var(--muted); }
+.terminal-prompt,.terminal-ready { color:var(--cobalt); }
 .design-scene { background:var(--porcelain); }
 .design-scene .agent-window { flex:260 1 0; }
 .design-scene .design-window { flex:400 1 0; }
@@ -51,7 +86,9 @@
   .hero-stage .example-window { height:244px; border:0; border-radius:8px; box-shadow:none; }
   .hero-stage .agent-window { width:174px; }
   .hero-stage .editor-window { width:230px; }
-  .hero-stage .preview-window,.hero-stage>.agent-window:last-child { display:none; }
+  .hero-stage .preview-window,.hero-stage .workspace-track>.agent-window:last-child { display:none; }
+  .workspace-track { gap:10px; }
+  .hero-stage .scene-viewport { height:244px; border-radius:8px; }
   .window-chrome { height:28px; gap:0; padding:0 10px; font-size:12px; line-height:16px; background:#fff; }
   .traffic-lights { display:none; }
   .agent-content { padding:16px 12px; gap:16px; }
@@ -65,12 +102,40 @@
   .pair-scene .example-window { height:244px; border:0; border-radius:8px; box-shadow:none; }
   .pair-scene .agent-window { flex:132 1 0; }
   .pair-scene .editor-window,.pair-scene .design-window { flex:178 1 0; }
+  .pair-demo .scene-viewport { height:244px; border-radius:8px; }
+  .pair-demo .workspace-track,.window-pair { gap:8px; }
+  .window-pair { flex-basis:calc(100% - 32px); }
+  .pair-demo .agent-window { flex:1 1 0; }
+  .pair-demo .editor-window { flex:2 1 0; }
+  .pair-demo .preview-window { flex-basis:112px; }
+  .pair-demo .agent-content { padding:16px 10px; }
+  .pair-demo .agent-task { font-size:14px; line-height:20px; }
+  .pair-demo .agent-reply { display:none; }
+  .pair-demo .editor-content { padding-inline:10px; }
+  .pair-demo .editor-code { font-size:11px; }
+  .pair-demo .preview-content { padding:24px 10px; }
+  .pair-demo .preview-content>img { width:30px; height:30px; }
+  .pair-demo .preview-content>p { font-size:17px; line-height:20px; }
+  .pair-demo .illustrative-download { font-size:10px; padding:5px 8px; }
+  .stack-scene { height:270px; padding:12px; border-radius:18px; }
+  .stack-feature { padding-block:40px; }
+  .stack-workspace { height:244px; --stack-gap:8px; --agent-share:40%; border-radius:8px; }
+  .stack-workspace .example-window { border:0; border-radius:8px; box-shadow:none; }
+  .stack-workspace .agent-content { padding:16px 10px; }
+  .stack-workspace .agent-task { font-size:14px; line-height:20px; }
+  .stack-workspace .agent-reply { font-size:12px; }
+  .stack-browser-content { padding:10px; }
+  .stack-site-name { display:none; }
+  .stack-browser-content p { font-size:17px; line-height:19px; }
+  .stack-terminal-content { padding:10px; font-size:12px; line-height:16px; }
   .design-feature h2 { font-size:34px; line-height:36px; }
   .design-canvas { padding:12px; }
   .design-artboard { width:154px; height:188px; padding:12px 8px; gap:16px; }
   .design-wordmark { font-size:9px; line-height:12px; }
   .design-artboard>p { font-size:17px; line-height:19px; letter-spacing:0; }
 }
+@media(min-width:761px) and (max-width:1050px) { .stack-feature { grid-template-columns:1fr; padding-block:48px; } }
+@media(prefers-reduced-motion:reduce) { .scene-replay:active { transform:none; } }
 @media(max-width:360px) {
   h1 { font-size:42px; line-height:46px; }
   .pair-scene .agent-content { padding-inline:9px; }

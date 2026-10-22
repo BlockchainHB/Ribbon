@@ -124,6 +124,8 @@ Closing: Bring your workspace together. Download.
 
 Paper QA: Hero spacing, readable type, contrast, alignment and intentional strip cropping reviewed. Coding scene clipped status removed. Overview labels/icons aligned on both widths. Design scene and regular-work scene reviewed. FAQ and closing keep the white surface. Complete desktop and mobile reviewed at their own widths; artboards use fit-content height. All scenes are illustrations, not hardware verification; Paper controls are static.
 
+Motion implementation, 22 October: added a distinct stacking section between the overview and design example. Heading: “Two windows. One column.” Support: “Stack a browser and terminal while your agent stays beside them.” The user authorized the separate sliding, pairing, and stacking demonstrations in [the motion plan](WEBSITE_MOTION.md). This addition preserves the approved page language and introduces no agent integration claims.
+
 
 ## Design rules
 

@@ -1,0 +1,20 @@
+---
+import MotionDemo from './MotionDemo.astro';
+import AgentWindow from './AgentWindow.astro';
+import WindowChrome from './WindowChrome.astro';
+---
+<MotionDemo kind="stack" label="stacking">
+  <div class="workspace-scene stack-scene" aria-hidden="true">
+    <div class="scene-viewport stack-workspace" data-viewport>
+      <AgentWindow />
+      <div class="example-window stack-browser" data-browser>
+        <WindowChrome title="Browser" />
+        <div class="stack-browser-content"><span class="stack-site-name">Ribbon</span><p>Your agents,<br />right beside<br />your work.</p></div>
+      </div>
+      <div class="example-window stack-terminal" data-terminal>
+        <WindowChrome title="Terminal" />
+        <pre class="stack-terminal-content"><span>~/workspace</span>{'\n'}<span class="terminal-prompt">❯</span> npm run dev{'\n\n'}<span class="terminal-ready">Ready on localhost</span></pre>
+      </div>
+    </div>
+  </div>
+</MotionDemo>
