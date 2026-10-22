@@ -1,0 +1,9 @@
+Ribbon's source is distributed under the MIT License in LICENSE.
+
+Third-party components retain their respective licenses. The vendored Paneru
+engine is Copyright (c) 2025 Karinushka@github, under the MIT License; see
+vendor/paneru/LICENSE.txt. Dependency licenses are collected during packaging
+and bundled in DependencyLicenses.txt.
+
+Apple application icons used in website illustrations are Apple trademarks
+and are not relicensed under Ribbon's MIT License.

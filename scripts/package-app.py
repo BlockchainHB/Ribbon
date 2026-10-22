@@ -50,6 +50,8 @@ license_text = (root / "vendor/paneru/LICENSE.txt").read_text()
 }, indent=2))
 shutil.copy2(root / "docs/about.html", resources / "README.html")
 shutil.copy2(root / "build/DependencyLicenses.txt", resources / "DependencyLicenses.txt")
+shutil.copy2(root / "LICENSE", resources / "LICENSE.txt")
+shutil.copy2(root / "NOTICE", resources / "NOTICE.txt")
 # iCloud adds presentation metadata to bundles in Documents; it is not build input.
 for attribute in ("com.apple.FinderInfo", "com.apple.ResourceFork"):
     subprocess.run(["/usr/bin/xattr", "-rd", attribute, str(app)],
