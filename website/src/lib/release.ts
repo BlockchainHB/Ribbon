@@ -9,6 +9,8 @@ function publicLink(value: string | undefined): string | undefined {
 
 const repository = 'https://github.com/BlockchainHB/Ribbon';
 
+export const releaseTag = release.tag;
+
 export const links = {
   download: publicLink(import.meta.env.PUBLIC_DOWNLOAD_URL) ?? `${repository}/releases/download/${release.tag}/${release.asset}`,
   repository: publicLink(import.meta.env.PUBLIC_REPOSITORY_URL) ?? repository,
