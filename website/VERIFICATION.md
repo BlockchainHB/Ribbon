@@ -76,3 +76,9 @@ Safari, physical phones, real background-tab visibility transitions, and frame-r
 - `npm run check`: 0 errors, warnings or hints. `npm run build`: passed, 2 static pages. `git diff --check`: passed.
 - Headless Chrome (Playwright with installed Chrome) at 1440×900 and 390×844: no console errors or warnings, no horizontal overflow; frames reviewed at five loop positions per scene, each loop closing on its first frame. Exactly one scene runs at a time; scrolling away pauses it; pause/play toggles state and accessible label; resizing rebuilds geometry and keeps loop position. Reduced motion (emulated): no scene runs, toggles hidden.
 - Not performed: Safari/WebKit review (including the known WebKit paused-`currentTime` issue), real phone, 120 Hz compositor profiling, or deployment.
+
+## Hero link and everyday-work motion — 22 October 2026
+
+- Removed the hero's “See how it works” scroll link and its unused styles; the hero keeps one download action.
+- “Your everyday work, too.” now stacks heading, subheading and illustration. The approved display artwork is inline SVG; each screen's strip scrolls independently and reveals a Mail window. The standalone `displays.svg` asset was removed.
+- `npm run check`: 0 errors, warnings or hints. `npm run build`: passed. Headless Chrome at 1440×900 and 390×844: no console errors, no horizontal overflow; the displays scene runs when centered and its loop frames were reviewed.
