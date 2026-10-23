@@ -1,18 +1,32 @@
-// Decorative, bounded website demonstrations. Native window state stays in the engine.
-type MotionSpec = { element: HTMLElement; frames: Keyframe[]; end: Record<string, string> };
+// Decorative, looping website demonstrations of window management. Native window state stays
+// in the engine. Each scene is a set of infinite WAAPI animations sharing one clock. Only the
+// most visible scene plays; offscreen scenes, hidden tabs, and user-paused scenes hold their
+// frame. Windows move with transforms; resizes animate the size of contained slots so text
+// reflows rather than scales. Reduced motion shows each scene's representative still frame.
+type Values = Record<string, string>;
+type Stop = { at: number; values: Values; easing?: string };
+type Track = { element: Element; frames: Keyframe[] };
+type Storyboard = { duration: number; still: number; tracks: Track[] };
+type Builder = (root: HTMLElement) => Storyboard;
+
 const travel = 'cubic-bezier(0.77, 0, 0.175, 1)';
 const feedback = 'cubic-bezier(0.23, 1, 0.32, 1)';
+const fadedOut = { opacity: '0' };
+const fadedIn = { opacity: '1' };
 
-const duration = 9000;
-type Stop = { at: number; values: Record<string, string>; easing?: string };
-
-function timeline(element: HTMLElement, stops: Stop[]): MotionSpec {
+// A stop's easing applies to the segment that begins at that stop.
+function timeline(element: Element | null, duration: number, stops: Stop[]): Track[] {
+  if (!element) return [];
   const state = { ...stops[0].values };
   const frames = stops.map(({ at, values, easing }) => ({ ...Object.assign(state, values), offset: at / duration, easing: easing ?? travel }));
-  return { element, frames, end: { ...state } };
+  return [{ element, frames }];
 }
 
-function storyboard(root: HTMLElement): { specs: MotionSpec[]; duration: number } {
+const translate = (x: number, y = 0) => `translate(${x}px, ${y}px)`;
+
+// Hero: swipe one column, move the editor + preview pair, stack Claude, then return.
+function workspace(root: HTMLElement): Storyboard {
+  const duration = 11000;
   const viewport = root.querySelector<HTMLElement>('[data-viewport]')!;
   const track = root.querySelector<HTMLElement>('[data-track]')!;
   const editor = root.querySelector<HTMLElement>('[data-editor]')!;
@@ -37,214 +51,396 @@ function storyboard(root: HTMLElement): { specs: MotionSpec[]; duration: number 
   const companionGroup = editorLeft - companionLeft;
   const companionStack = editorLeft + groupMove - companionLeft;
   const stackedWidth = width - previewWidth - gap;
-  const translate = (x: number, y = 0) => `translate(${x}px, ${y}px)`;
-  const specs = [
-    timeline(track, [
-      { at: 0, values: { transform: translate(0) } },
-      { at: 900, values: {} },
-      { at: 1800, values: { transform: translate(-editorLeft) } },
-      { at: 3750, values: {} },
-      { at: 4300, values: { transform: translate(-editorLeft - camera) } },
-      { at: 6200, values: {} },
-      { at: 7000, values: { transform: translate(-editorLeft) } },
-      { at: duration, values: {} },
-    ]),
-    timeline(editor, [
-      { at: 0, values: { transform: translate(0), width: `${editorWidth}px`, height: `${full}px` } },
-      { at: 3000, values: {} },
-      { at: 3750, values: { transform: translate(groupMove) } },
-      { at: 5000, values: {} },
-      { at: 5500, values: { height: `${half}px` } },
-      { at: 6200, values: {} },
-      { at: 7000, values: { transform: translate(0), width: `${stackedWidth}px` } },
-      { at: duration, values: {} },
-    ]),
-    timeline(preview, [
-      { at: 0, values: { transform: translate(0) } },
-      { at: 3000, values: {} },
-      { at: 3750, values: { transform: translate(groupMove) } },
-      { at: 6200, values: {} },
-      { at: 7000, values: { transform: translate(editorLeft + stackedWidth + gap - previewLeft) } },
-      { at: duration, values: {} },
-    ]),
-    timeline(companion, [
-      { at: 0, values: { transform: translate(0), width: `${companionWidth}px`, height: `${full}px`, opacity: '1' } },
-      { at: 2700, values: {}, easing: feedback },
-      { at: 2850, values: { opacity: '0' } },
-      { at: 3000, values: {} },
-      { at: 3750, values: { transform: translate(companionGroup) }, easing: feedback },
-      { at: 3950, values: { opacity: narrow ? '0' : '1' } },
-      { at: 5000, values: {} },
-      { at: 5500, values: { height: `${half}px`, transform: translate(companionGroup, down) } },
-      { at: 6200, values: { transform: translate(companionStack, down), width: `${editorWidth}px`, opacity: '1' } },
-      { at: 7000, values: { transform: translate(companionGroup, down), width: `${stackedWidth}px` } },
-      { at: duration, values: {} },
-    ]),
-    timeline(outline, [
-      { at: 0, values: { opacity: '0', transform: translate(0) } },
-      { at: 2450, values: {}, easing: feedback },
-      { at: 2700, values: { opacity: '1' } },
-      { at: 3000, values: {} },
-      { at: 3750, values: { transform: translate(groupMove) } },
-      { at: 4750, values: {}, easing: feedback },
-      { at: 5000, values: { opacity: '0' } },
-      { at: duration, values: {} },
-    ]),
-  ];
-  for (const [name, from, to] of [['swipe', 0, 2450], ['group', 2450, 4750], ['stack', 4750, duration]] as const) {
-    const caption = root.querySelector<HTMLElement>(`[data-caption="${name}"]`)!;
-    const stops: Stop[] = [{ at: 0, values: { opacity: from === 0 ? '1' : '0' } }];
-    if (from) stops.push({ at: from, values: {}, easing: feedback }, { at: from + 150, values: { opacity: '1' } });
-    if (to < duration) stops.push({ at: to - 150, values: {}, easing: feedback }, { at: to, values: { opacity: '0' } });
-    stops.push({ at: duration, values: {} });
-    specs.push(timeline(caption, stops));
-  }
-  return { specs, duration };
+  const captions = (name: string, stops: Stop[]) => timeline(root.querySelector(`[data-caption="${name}"]`), duration, stops);
+  return {
+    duration,
+    still: 8200,
+    tracks: [
+      ...timeline(track, duration, [
+        { at: 0, values: { transform: translate(0) } },
+        { at: 900, values: {} },
+        { at: 1800, values: { transform: translate(-editorLeft) } },
+        { at: 3750, values: {} },
+        { at: 4300, values: { transform: translate(-editorLeft - camera) } },
+        { at: 6200, values: {} },
+        { at: 7000, values: { transform: translate(-editorLeft) } },
+        { at: 9300, values: {} },
+        { at: 10300, values: { transform: translate(0) } },
+        { at: duration, values: {} },
+      ]),
+      ...timeline(editor, duration, [
+        { at: 0, values: { transform: translate(0), width: `${editorWidth}px`, height: `${full}px` } },
+        { at: 3000, values: {} },
+        { at: 3750, values: { transform: translate(groupMove) } },
+        { at: 5000, values: {} },
+        { at: 5500, values: { height: `${half}px` } },
+        { at: 6200, values: {} },
+        { at: 7000, values: { transform: translate(0), width: `${stackedWidth}px` } },
+        { at: 9300, values: {} },
+        { at: 10100, values: { width: `${editorWidth}px`, height: `${full}px` } },
+        { at: duration, values: {} },
+      ]),
+      ...timeline(preview, duration, [
+        { at: 0, values: { transform: translate(0) } },
+        { at: 3000, values: {} },
+        { at: 3750, values: { transform: translate(groupMove) } },
+        { at: 6200, values: {} },
+        { at: 7000, values: { transform: translate(editorLeft + stackedWidth + gap - previewLeft) } },
+        { at: 9300, values: {} },
+        { at: 10100, values: { transform: translate(0) } },
+        { at: duration, values: {} },
+      ]),
+      ...timeline(companion, duration, [
+        { at: 0, values: { transform: translate(0), width: `${companionWidth}px`, height: `${full}px`, opacity: '1' } },
+        { at: 2700, values: {}, easing: feedback },
+        { at: 2850, values: { opacity: '0' } },
+        { at: 3000, values: {} },
+        { at: 3750, values: { transform: translate(companionGroup) }, easing: feedback },
+        { at: 3950, values: { opacity: narrow ? '0' : '1' } },
+        { at: 5000, values: {} },
+        { at: 5500, values: { height: `${half}px`, transform: translate(companionGroup, down) } },
+        { at: 6200, values: { transform: translate(companionStack, down), width: `${editorWidth}px`, opacity: '1' } },
+        { at: 7000, values: { transform: translate(companionGroup, down), width: `${stackedWidth}px` } },
+        { at: 9000, values: {}, easing: feedback },
+        { at: 9200, values: { opacity: '0' } },
+        { at: 9250, values: {} },
+        // Invisible return to its clipped starting slot; it reappears offscreen.
+        { at: 9300, values: { transform: translate(0), width: `${companionWidth}px`, height: `${full}px` } },
+        { at: 10300, values: {}, easing: feedback },
+        { at: 10500, values: { opacity: '1' } },
+        { at: duration, values: {} },
+      ]),
+      ...timeline(outline, duration, [
+        { at: 0, values: { opacity: '0', transform: translate(0) } },
+        { at: 2450, values: {}, easing: feedback },
+        { at: 2700, values: { opacity: '1' } },
+        { at: 3000, values: {} },
+        { at: 3750, values: { transform: translate(groupMove) } },
+        { at: 4750, values: {}, easing: feedback },
+        { at: 5000, values: { opacity: '0' } },
+        { at: 5100, values: { transform: translate(0) } },
+        { at: duration, values: {} },
+      ]),
+      ...captions('swipe', [
+        { at: 0, values: fadedIn },
+        { at: 2300, values: {}, easing: feedback },
+        { at: 2450, values: fadedOut },
+        { at: 9200, values: {}, easing: feedback },
+        { at: 9350, values: fadedIn },
+        { at: duration, values: {} },
+      ]),
+      ...captions('group', [
+        { at: 0, values: fadedOut },
+        { at: 2450, values: {}, easing: feedback },
+        { at: 2600, values: fadedIn },
+        { at: 4600, values: {}, easing: feedback },
+        { at: 4750, values: fadedOut },
+        { at: duration, values: {} },
+      ]),
+      ...captions('stack', [
+        { at: 0, values: fadedOut },
+        { at: 4750, values: {}, easing: feedback },
+        { at: 4900, values: fadedIn },
+        { at: 9050, values: {}, easing: feedback },
+        { at: 9200, values: fadedOut },
+        { at: duration, values: {} },
+      ]),
+    ],
+  };
 }
 
+// Shared strip geometry: viewport width, gap, and a slot's resting box.
+function strip(root: HTMLElement) {
+  const viewport = root.querySelector<HTMLElement>('[data-viewport]')!;
+  const style = getComputedStyle(viewport);
+  const slot = (name: string) => root.querySelector<HTMLElement>(`[data-slot="${name}"]`)!;
+  return { width: viewport.clientWidth, height: viewport.clientHeight, gap: parseFloat(style.getPropertyValue('--g')), slot };
+}
+
+// A linked pair moves as one block: Codex + IDE trade places with Safari, then return.
+function pair(root: HTMLElement): Storyboard {
+  const duration = 9000;
+  const { gap, slot } = strip(root);
+  const codex = slot('codex');
+  const ide = slot('ide');
+  const safari = slot('safari');
+  const pairWidth = ide.offsetLeft + ide.offsetWidth - codex.offsetLeft;
+  const swap = (distance: number): Stop[] => [
+    { at: 0, values: { transform: translate(0) } },
+    { at: 1300, values: {} },
+    { at: 2000, values: { transform: translate(distance) } },
+    { at: 4400, values: {} },
+    { at: 5100, values: { transform: translate(0) } },
+    { at: duration, values: {} },
+  ];
+  const block = safari.offsetWidth + gap;
+  const outline = root.querySelector('[data-outline]');
+  return {
+    duration,
+    still: 3000,
+    tracks: [
+      ...timeline(codex, duration, swap(block)),
+      ...timeline(ide, duration, swap(block)),
+      ...timeline(outline, duration, swap(block)),
+      ...timeline(safari, duration, swap(-(pairWidth + gap))),
+      ...timeline(outline, duration, [
+        { at: 0, values: fadedOut },
+        { at: 700, values: {}, easing: feedback },
+        { at: 1000, values: fadedIn },
+        { at: 7600, values: {}, easing: feedback },
+        { at: 7900, values: fadedOut },
+        { at: duration, values: {} },
+      ]),
+    ],
+  };
+}
+
+// Open the overview, choose Claude, and the strip scrolls to it; then choose Codex to return.
+function overview(root: HTMLElement): Storyboard {
+  const duration = 9600;
+  const { slot } = strip(root);
+  const items = [...root.querySelectorAll<HTMLElement>('[data-item]')];
+  const x = (index: number) => items[index].offsetLeft - items[1].offsetLeft;
+  const closed = { opacity: '0', transform: 'scale(.96)' };
+  const open = { opacity: '1', transform: 'none' };
+  const dimmed = { opacity: '.35', transform: 'scale(.97)' };
+  const clear = { opacity: '1', transform: 'none' };
+  const overlay = (rest: Values, shown: Values): Stop[] => [
+    { at: 0, values: rest },
+    { at: 1000, values: {}, easing: feedback },
+    { at: 1350, values: shown },
+    { at: 2700, values: {}, easing: feedback },
+    { at: 3000, values: rest },
+    { at: 5800, values: {}, easing: feedback },
+    { at: 6150, values: shown },
+    { at: 7400, values: {}, easing: feedback },
+    { at: 7700, values: rest },
+    { at: duration, values: {} },
+  ];
+  const choose = (to: number, at: number): Stop[] => [
+    { at, values: {} },
+    { at: at + 500, values: { transform: translate(x(to)) }, easing: feedback },
+    { at: at + 600, values: { transform: `${translate(x(to))} scale(.88)` }, easing: feedback },
+    { at: at + 750, values: { transform: translate(x(to)) } },
+  ];
+  return {
+    duration,
+    still: 2600,
+    tracks: [
+      ...timeline(root.querySelector('[data-overview]'), duration, overlay(closed, open)),
+      ...timeline(root.querySelector('[data-workspace]'), duration, overlay(clear, dimmed)),
+      ...timeline(root.querySelector('[data-pointer]'), duration, [{ at: 0, values: { transform: translate(x(0)) } }, ...choose(1, 1700), ...choose(0, 6400), { at: duration, values: {} }]),
+      ...timeline(root.querySelector('[data-pointer]'), duration, [
+        { at: 0, values: fadedOut },
+        { at: 1350, values: {}, easing: feedback },
+        { at: 1550, values: fadedIn },
+        { at: 2700, values: {}, easing: feedback },
+        { at: 2900, values: fadedOut },
+        { at: 6150, values: {}, easing: feedback },
+        { at: 6350, values: fadedIn },
+        { at: 7400, values: {}, easing: feedback },
+        { at: 7600, values: fadedOut },
+        { at: duration, values: {} },
+      ]),
+      ...timeline(root.querySelector('[data-highlight]'), duration, [
+        { at: 0, values: { transform: translate(x(0)) } },
+        { at: 2300, values: {}, easing: feedback },
+        { at: 2550, values: { transform: translate(x(1)) } },
+        { at: 7000, values: {}, easing: feedback },
+        { at: 7250, values: { transform: translate(x(0)) } },
+        { at: duration, values: {} },
+      ]),
+      ...timeline(root.querySelector('[data-track]'), duration, [
+        { at: 0, values: { transform: translate(0) } },
+        { at: 2800, values: {} },
+        { at: 3500, values: { transform: translate(-slot('terminal').offsetLeft) } },
+        { at: 7500, values: {} },
+        { at: 8200, values: { transform: translate(0) } },
+        { at: duration, values: {} },
+      ]),
+    ],
+  };
+}
+// Terminal leaves its own column and joins Safari's: one column, two windows, then unstack.
+function stack(root: HTMLElement): Storyboard {
+  const duration = 9000;
+  const { width, height, gap, slot } = strip(root);
+  const unit = (width - 2 * gap) / 100;
+  const half = (height - gap) / 2;
+  const single = `${32 * unit}px`;
+  const column = `${64 * unit + gap}px`;
+  const resize = (side: Values, stacked: Values): Stop[] => [
+    { at: 0, values: side },
+    { at: 1000, values: {} },
+    { at: 1800, values: stacked },
+    { at: 6200, values: {} },
+    { at: 7000, values: side },
+    { at: duration, values: {} },
+  ];
+  return {
+    duration,
+    still: 4000,
+    tracks: [
+      ...timeline(slot('browser'), duration, resize({ width: single, height: `${height}px` }, { width: column, height: `${half}px` })),
+      ...timeline(slot('terminal'), duration, resize(
+        { transform: translate(32 * unit + gap, -(half + gap)), width: single, height: `${height}px` },
+        { transform: translate(0), width: column, height: `${half}px` },
+      )),
+    ],
+  };
+}
+
+// Paper widens from a half to two-thirds, the strip scrolls to the preview, then everything returns.
+function design(root: HTMLElement): Storyboard {
+  const duration = 10000;
+  const { width, gap, slot } = strip(root);
+  const half = (width - gap) / 2;
+  const third = (width - gap) / 3;
+  const twoThirds = width - gap - third;
+  const widths = (rest: Values, wide: Values): Stop[] => [
+    { at: 0, values: rest },
+    { at: 1000, values: {} },
+    { at: 1800, values: wide },
+    { at: 8100, values: {} },
+    { at: 8900, values: rest },
+    { at: duration, values: {} },
+  ];
+  return {
+    duration,
+    still: 2600,
+    tracks: [
+      ...timeline(slot('claude'), duration, widths({ width: `${half}px` }, { width: `${third}px` })),
+      ...timeline(slot('paper'), duration, widths({ transform: translate(0), width: `${half}px` }, { transform: translate(third - half), width: `${twoThirds}px` })),
+      ...timeline(root.querySelector('[data-track]'), duration, [
+        { at: 0, values: { transform: translate(0) } },
+        { at: 3400, values: {} },
+        { at: 4200, values: { transform: translate(-(third + gap)) } },
+        { at: 6500, values: {} },
+        { at: 7300, values: { transform: translate(0) } },
+        { at: duration, values: {} },
+      ]),
+    ],
+  };
+}
+
+const builders: Record<string, Builder> = { workspace, pair, overview, stack, design };
+
 class Scene {
-  readonly stage: HTMLElement;
-  readonly button: HTMLButtonElement;
-  complete = false;
-  private allowed = false;
-  private userPaused = false;
-  private epoch = 0;
+  visible = 0;
+  width: number;
   private animations: Animation[] = [];
-  private specs: MotionSpec[] = [];
-  private phase: 'idle' | 'playing' | 'resetting' = 'idle';
-  private width: number;
-  private resize: ResizeObserver;
+  private paused = false;
+  private running = false;
+  private readonly button: HTMLButtonElement | null;
 
-  constructor(readonly root: HTMLElement, private changed: () => void, replay: () => void) {
-    this.stage = root.querySelector<HTMLElement>('.workspace-scene')!;
-    this.button = root.querySelector<HTMLButtonElement>('.scene-replay')!;
-    this.button.addEventListener('click', () => {
-      if (this.complete) { replay(); return; }
-      this.userPaused = !this.userPaused;
-      this.setActive(this.allowed);
+  constructor(readonly root: HTMLElement, private readonly build: Builder, changed: () => void) {
+    this.button = root.querySelector<HTMLButtonElement>('[data-scene-toggle]');
+    this.button?.addEventListener('click', () => {
+      this.paused = !this.paused;
+      this.label();
+      changed();
     });
-    this.width = this.stage.clientWidth;
-    this.resize = new ResizeObserver(() => {
-      if (Math.abs(this.stage.clientWidth - this.width) < 1) return;
-      this.width = this.stage.clientWidth;
-      if (this.phase !== 'idle' || this.complete) this.finish(matchMedia('(prefers-reduced-motion: reduce)').matches);
-      else { this.clear(); this.prime(); }
-    });
-    this.resize.observe(this.stage);
-    this.prime();
-    root.dataset.motionState = 'idle';
+    this.width = root.clientWidth;
   }
 
-  private prime() {
-    this.specs = storyboard(this.root).specs;
-    for (const { element, frames, end } of this.specs) {
-      for (const property of Object.keys(end)) element.style.setProperty(property, String(frames[0][property]));
+  // Rebuild from current geometry, keeping the loop position across resizes.
+  mount(reduced: boolean) {
+    const previous = Number(this.animations[0]?.currentTime ?? 0);
+    this.cancel();
+    this.width = this.root.clientWidth;
+    const { duration, still, tracks } = this.build(this.root);
+    this.animations = tracks.map(({ element, frames }) => element.animate(frames, { duration, iterations: Infinity, fill: 'both' }));
+    const time = reduced ? still : previous % duration;
+    for (const animation of this.animations) {
+      animation.currentTime = time;
+      animation.pause();
     }
+    this.running = false;
+    if (this.button) this.button.hidden = reduced;
+    this.label();
   }
 
-  setActive(active: boolean) {
-    this.allowed = active;
-    this.updateControl();
-    if (this.complete) return;
-    const running = active && !this.userPaused;
-    if (running && this.phase === 'idle') { void this.play(); return; }
-    for (const animation of this.animations) running ? animation.play() : animation.pause();
-    this.root.dataset.motionState = this.phase === 'idle' ? 'idle' : running ? this.phase : 'paused';
+  set(run: boolean) {
+    const next = run && !this.paused;
+    if (next === this.running) return;
+    this.running = next;
+    for (const animation of this.animations) next ? animation.play() : animation.pause();
   }
 
-  private updateControl() {
-    this.button.dataset.control = this.complete ? 'replay' : this.userPaused ? 'play' : 'pause';
-    this.button.setAttribute('aria-label', `${this.complete ? 'Replay' : this.userPaused ? 'Resume' : 'Pause'} workspace demonstration`);
+  private label() {
+    this.root.dataset.playback = this.paused ? 'paused' : 'playing';
+    this.button?.setAttribute('aria-label', `${this.paused ? 'Play' : 'Pause'} ${this.button.dataset.label}`);
   }
 
-  async play(replay = false) {
-    const epoch = ++this.epoch;
-    this.complete = false;
-    this.userPaused = false;
-    this.button.hidden = false;
-    if (replay) {
-      this.phase = 'resetting';
-      const opacity = getComputedStyle(this.stage).opacity;
-      this.animations.forEach(animation => animation.pause());
-      const fade = this.stage.animate([{ opacity }, { opacity: 0 }], { duration: 80, fill: 'forwards' });
-      this.animations.push(fade);
-      if (!this.allowed) fade.pause();
-      try { await fade.finished; } catch { return; }
-      if (epoch !== this.epoch) return;
-    }
-    this.clear();
-    const { specs, duration } = storyboard(this.root);
-    this.specs = specs;
-    this.phase = 'playing';
-    this.animations = specs.map(({ element, frames }) => element.animate(frames, { duration, fill: 'both' }));
-    if (replay) this.animations.push(this.stage.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: feedback, fill: 'both' }));
-    this.setActive(this.allowed);
-    try {
-      await Promise.all(this.animations.map(animation => animation.finished));
-      if (epoch === this.epoch) this.finish();
-    } catch { /* A superseded run owns no further work. */ }
-  }
-
-  finish(staticFrame = false) {
-    ++this.epoch;
-    this.clear();
-    this.specs = storyboard(this.root).specs;
-    for (const { element, end } of this.specs) Object.assign(element.style, end);
-    this.complete = true;
-    this.phase = 'idle';
-    this.root.dataset.motionState = 'complete';
-    this.button.hidden = staticFrame;
-    this.updateControl();
-    this.changed();
-  }
-
-  private clear() {
-    this.animations.forEach(animation => animation.cancel());
+  cancel() {
+    this.animations.forEach((animation) => animation.cancel());
     this.animations = [];
-    for (const { element, end } of this.specs) for (const property of Object.keys(end)) element.style.removeProperty(property);
-    this.specs = [];
+    this.running = false;
   }
-
-  destroy() { ++this.epoch; this.clear(); this.resize.disconnect(); }
 }
 
 function mount() {
-  const root = document.querySelector<HTMLElement>('[data-motion="workspace"]');
-  if (!root || !('animate' in HTMLElement.prototype)) return;
+  if (!('animate' in Element.prototype)) return;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-  let ratio = 0;
-  const scene = new Scene(root, reconcile, () => {
-    if (reduced.matches) return;
-    scene.setActive(false);
-    void scene.play(true);
-    reconcile();
+  let frame = 0;
+  const schedule = () => { frame ||= requestAnimationFrame(reconcile); };
+  const scenes = [...document.querySelectorAll<HTMLElement>('[data-motion]')].flatMap((root) => {
+    const build = builders[root.dataset.motion ?? ''];
+    return build ? [new Scene(root, build, schedule)] : [];
+  });
+  if (!scenes.length) return;
+  const byRoot = new Map(scenes.map((scene) => [scene.root as Element, scene]));
+
+  // One scene at a time: the one with the most visible area.
+  function reconcile() {
+    frame = 0;
+    const active = reduced.matches || document.hidden ? null : scenes.reduce<Scene | null>((best, scene) => (scene.visible > (best?.visible ?? 0) ? scene : best), null);
+    for (const scene of scenes) scene.set(scene === active);
+  }
+
+  const visibility = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      const scene = byRoot.get(entry.target)!;
+      // Tall scenes on short viewports qualify once they fill a third of the viewport.
+      const needed = Math.min(0.35, (innerHeight / Math.max(entry.boundingClientRect.height, 1)) * 0.35);
+      scene.visible = entry.isIntersecting && entry.intersectionRatio >= needed ? entry.intersectionRect.height : 0;
+    }
+    schedule();
+  }, { threshold: [0, 0.1, 0.2, 0.35, 0.5, 0.65, 0.8, 1] });
+
+  const geometry = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const scene = byRoot.get(entry.target)!;
+      if (Math.abs(scene.root.clientWidth - scene.width) < 1) continue;
+      scene.mount(reduced.matches);
+    }
+    schedule();
   });
 
-  function reconcile() {
-    scene.setActive(!reduced.matches && !document.hidden && ratio >= Math.min(.5, innerHeight / root!.offsetHeight / 2));
+  function remount() {
+    for (const scene of scenes) scene.mount(reduced.matches);
+    schedule();
   }
-  const observer = new IntersectionObserver(([entry]) => {
-    ratio = entry.intersectionRatio;
-    reconcile();
-  }, { threshold: Array.from({ length: 21 }, (_, index) => index / 20) });
-  observer.observe(root);
 
-  function preferenceChanged() {
-    scene.finish(true);
-    scene.button.hidden = reduced.matches;
-    reconcile();
+  remount();
+  for (const scene of scenes) {
+    visibility.observe(scene.root);
+    geometry.observe(scene.root);
   }
-  if (reduced.matches) preferenceChanged();
-  reduced.addEventListener('change', preferenceChanged);
-  document.addEventListener('visibilitychange', reconcile);
-  window.addEventListener('pageshow', reconcile);
-  window.addEventListener('pagehide', event => {
-    if (event.persisted) { scene.setActive(false); return; }
-    observer.disconnect();
-    scene.destroy();
-    reduced.removeEventListener('change', preferenceChanged);
-    document.removeEventListener('visibilitychange', reconcile);
-    window.removeEventListener('pageshow', reconcile);
+  reduced.addEventListener('change', remount);
+  document.addEventListener('visibilitychange', schedule);
+  window.addEventListener('pageshow', schedule);
+  window.addEventListener('pagehide', (event) => {
+    if (event.persisted) {
+      for (const scene of scenes) scene.set(false);
+      return;
+    }
+    visibility.disconnect();
+    geometry.disconnect();
+    for (const scene of scenes) scene.cancel();
+    reduced.removeEventListener('change', remount);
+    document.removeEventListener('visibilitychange', schedule);
+    window.removeEventListener('pageshow', schedule);
   });
 }
 

@@ -1,0 +1,38 @@
+---
+import AppWindow from './AppWindow.astro';
+interface Props { compact?: boolean; }
+const { compact = false } = Astro.props;
+type Token = [kind: string, text: string];
+// Highlighted lines are the agent's edit.
+const lines: { tokens: Token[]; diff?: boolean }[] = [
+  { tokens: [['tag', '<section'], ['attr', ' class'], ['plain', '='], ['string', '"hero"'], ['tag', '>']] },
+  { tokens: [['plain', '  '], ['tag', '<h1>']] },
+  { tokens: [['plain', '    Your agents,']], diff: true },
+  { tokens: [['plain', '    right beside your work.']], diff: true },
+  { tokens: [['plain', '  '], ['tag', '</h1>']] },
+  { tokens: [['plain', '  '], ['tag', '<p>'], ['plain', 'Codex beside your IDE.'], ['tag', '</p>']], diff: true },
+  { tokens: [['plain', '  '], ['tag', '<DownloadLink'], ['attr', ' icon'], ['tag', ' />']] },
+  { tokens: [['tag', '</section>']] },
+];
+const tree: [string, number, boolean?][] = [['src', 0], ['pages', 1], ['index.astro', 2, true], ['components', 1], ['styles', 1], ['package.json', 0]];
+---
+<AppWindow app="ide" title="index.astro — ribbon" icon="cursor" class={compact ? 'compact-ide' : undefined}>
+  <div class="ide-layout">
+    <div class="ide-sidebar">
+      <p class="ide-label">Ribbon</p>
+      {tree.map(([name, depth, active]) => <p class:list={['tree-item', { 'tree-file': name.includes('.'), active }]} style={`--depth:${depth}`}>{name}</p>)}
+    </div>
+    <div class="ide-editor">
+      <div class="ide-tabs"><span class="ide-tab active">index.astro</span><span class="ide-tab">site.css</span></div>
+      <div class="ide-code">
+        {lines.map(({ tokens, diff }, index) => (
+          <p class:list={['code-line', { 'diff-line': diff }]}>
+            <span class="line-number">{index + 1}</span>
+            {tokens.map(([kind, text]) => <span class={`token-${kind}`}>{text}</span>)}
+          </p>
+        ))}
+      </div>
+    </div>
+  </div>
+  <div class="ide-status"><span>main</span><span>Astro</span><span>Ln 4, Col 27</span></div>
+</AppWindow>

@@ -1,0 +1,30 @@
+---
+import AppWindow from './AppWindow.astro';
+const layers = ['Navigation', 'Headline', 'Download', 'Workspace'];
+---
+<AppWindow app="paper">
+  <Fragment slot="toolbar"><span class="window-title"><span class="paper-mark"></span><span>Ribbon site — Homepage</span></span></Fragment>
+  <div class="paper-layout">
+    <div class="paper-layers">
+      <p class="panel-label">Layers</p>
+      <p class="layer layer-artboard">Homepage</p>
+      {layers.map((layer) => <p class:list={['layer', { selected: layer === 'Headline' }]}>{layer}</p>)}
+    </div>
+    <div class="paper-canvas">
+      <div class="paper-artboard">
+        <span class="artboard-name">Homepage</span>
+        <p class="artboard-nav"><img src="/assets/ribbon-icon.png" width="10" height="10" alt="" loading="lazy" /><span>Ribbon</span><i></i><i></i></p>
+        <div class="artboard-headline"><p>Your agents,<br />right beside your work.</p><span class="selection-box"><i></i><i></i><i></i><i></i></span></div>
+        <div class="artboard-below"><span class="mini-download">Download</span><span class="artboard-workspace"><i></i><i></i><i></i></span></div>
+      </div>
+    </div>
+    <div class="paper-inspector">
+      <p class="panel-label">Text</p>
+      <p class="property"><span>Font</span><span>SF Pro</span></p>
+      <p class="property"><span>Size</span><span>48</span></p>
+      <p class="property"><span>Weight</span><span>Medium</span></p>
+      <p class="panel-label">Layout</p>
+      <p class="property"><span>Gap</span><span>32</span></p>
+    </div>
+  </div>
+</AppWindow>

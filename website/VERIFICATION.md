@@ -68,3 +68,11 @@ No actionable UI-polish findings remain in the inspected Chromium states. Safari
 - Evidence: `build/qa/hero-story/verification.json`, `desktop-group.png`, `mobile-group.png`, and `mobile-stack.png`.
 
 Safari, physical phones, real background-tab visibility transitions, and frame-rate profiling remain unverified. The release archive and native window-management behavior are unchanged. This revision is verified in the local production preview; no website deployment is claimed.
+
+## Detailed looping window-management scenes — 22 October 2026
+
+- Replaced generic windows with detailed, static Codex, Claude (spark before reply), Cursor-style IDE, Safari, Terminal and Paper windows. Feature scenes now loop window movement: pair block reorder, overview selection that scrolls the strip, column stacking, and width preset + strip scroll. Feature sections alternate text side and blue/porcelain cards; “Your everyday work, too.” section markup, display rules, and `displays.svg` are byte-identical to `main`.
+- Every scene loops with infinite WAAPI animations; only the most visible scene plays. Replay removed; a pause/play toggle remains per scene (WCAG 2.2.2).
+- `npm run check`: 0 errors, warnings or hints. `npm run build`: passed, 2 static pages. `git diff --check`: passed.
+- Headless Chrome (Playwright with installed Chrome) at 1440×900 and 390×844: no console errors or warnings, no horizontal overflow; frames reviewed at five loop positions per scene, each loop closing on its first frame. Exactly one scene runs at a time; scrolling away pauses it; pause/play toggles state and accessible label; resizing rebuilds geometry and keeps loop position. Reduced motion (emulated): no scene runs, toggles hidden.
+- Not performed: Safari/WebKit review (including the known WebKit paused-`currentTime` issue), real phone, 120 Hz compositor profiling, or deployment.

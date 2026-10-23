@@ -1,0 +1,18 @@
+---
+import ClaudeWindow from './apps/ClaudeWindow.astro';
+import PaperWindow from './apps/PaperWindow.astro';
+import SafariWindow from './apps/SafariWindow.astro';
+import SceneToggle from './SceneToggle.astro';
+---
+<div class="motion-scene" data-motion="design">
+  <div class="workspace-scene strip-scene design-scene scene-light" aria-hidden="true">
+    <div class="scene-viewport" data-viewport>
+      <div class="strip-track" data-track>
+        <div class="strip-slot" data-slot="claude"><ClaudeWindow /></div>
+        <div class="strip-slot" data-slot="paper"><PaperWindow /></div>
+        <div class="strip-slot" data-slot="safari"><SafariWindow /></div>
+      </div>
+    </div>
+  </div>
+  <SceneToggle label="design demonstration" />
+</div>

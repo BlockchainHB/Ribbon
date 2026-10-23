@@ -1,0 +1,15 @@
+---
+import AppWindow from './AppWindow.astro';
+---
+<AppWindow app="safari">
+  <Fragment slot="toolbar">
+    <span class="safari-nav" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg><svg width="12" height="12" viewBox="0 0 16 16"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg></span>
+    <span class="safari-address"><img src="/assets/safari.png" width="12" height="12" alt="" loading="lazy" /><span>localhost:4321</span></span>
+  </Fragment>
+  <div class="mini-site">
+    <p class="mini-nav"><img src="/assets/ribbon-icon.png" width="12" height="12" alt="" loading="lazy" /><span>Ribbon</span><i></i><i></i><b>Download</b></p>
+    <p class="mini-headline">Your agents,<br />right beside<br />your work.</p>
+    <p class="mini-description">Codex beside your IDE.</p>
+    <span class="mini-download">Download</span>
+  </div>
+</AppWindow>

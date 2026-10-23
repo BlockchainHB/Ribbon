@@ -1,0 +1,12 @@
+---
+import AppWindow from './AppWindow.astro';
+---
+<AppWindow app="terminal" title="website — npm run dev" icon="terminal" dark>
+  <div class="terminal-output">
+    <p><span class="terminal-path">~/ribbon/website</span> <span class="terminal-branch">main</span></p>
+    <p><span class="terminal-prompt">❯</span> npm run dev</p>
+    <p><span class="terminal-badge">astro</span> <span class="terminal-muted">v7.4.2</span> ready</p>
+    <p><span class="terminal-muted">┃ Local</span>  <span class="terminal-link">localhost:4321</span></p>
+    <p><span class="terminal-ready">✓</span> <span class="terminal-muted">watching for changes</span></p>
+  </div>
+</AppWindow>
