@@ -1,6 +1,6 @@
 {
   "version": "0.2.0",
-  "build": "17",
-  "tag": "v0.2.0-beta.1",
+  "build": "18",
+  "tag": "v0.2.0-beta.2",
   "asset": "Ribbon-macOS-arm64.zip"
 }

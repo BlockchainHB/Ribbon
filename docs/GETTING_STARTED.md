@@ -2,7 +2,7 @@
 
 ## Install
 
-1. [Download Ribbon](https://github.com/BlockchainHB/Ribbon/releases/download/v0.2.0-beta.1/Ribbon-macOS-arm64.zip), unzip it, and move **Ribbon.app** to **Applications**.
+1. [Download Ribbon](https://github.com/BlockchainHB/Ribbon/releases/download/v0.2.0-beta.2/Ribbon-macOS-arm64.zip), unzip it, and move **Ribbon.app** to **Applications**.
 2. Open Ribbon. In **System Settings → Privacy & Security → Accessibility**, allow Ribbon.
 3. Return to **Ribbon → Settings → General** and turn on **Window management**.
 
