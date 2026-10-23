@@ -134,7 +134,7 @@ fn fill_centers_only_overflow_and_full_width_round_trip_retains_preference() {
     let frames = world
         .query::<&Window>()
         .iter(world)
-        .map(|window| window.frame())
+        .map(Window::frame)
         .collect::<Vec<_>>();
     assert_eq!(frames.iter().map(|f| f.min.x).min(), Some(0));
     assert_eq!(frames.iter().map(|f| f.max.x).max(), Some(1024));

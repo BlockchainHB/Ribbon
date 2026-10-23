@@ -30,6 +30,7 @@ use crate::ecs::layout::parking::{
 };
 use crate::ecs::layout::{Column, LayoutStrip};
 use crate::ecs::params::{ActiveDisplay, FrameActivity, Windows};
+use crate::ecs::projection::{ProjectionPending, ProjectionViewport};
 use crate::ecs::{
     ActiveWorkspaceMarker, Bounds, BruteforceWindows, FlashMessage, FocusedMarker, Initializing,
     LowPowerMode, MissionControlActive, Position, ReadDisplayProperties, RestoreWindowState,
@@ -108,12 +109,17 @@ type NativePositionWindows<'w, 's> = Populated<
         &'static Bounds,
         Option<&'static EdgePresentation>,
     ),
-    Changed<Position>,
+    Or<(
+        Changed<Position>,
+        Changed<ProjectionViewport>,
+        With<ProjectionPending>,
+    )>,
 >;
 
 type NativeResizeFilter = (
     Or<(Changed<Bounds>, Changed<EdgePresentation>)>,
     Without<CompactParked>,
+    Without<ProjectionPending>,
 );
 
 type NativeSizeWindows<'w, 's> = Populated<
@@ -1158,6 +1164,10 @@ pub(super) fn update_overlays(
 #[instrument(level = Level::TRACE, skip_all)]
 pub(super) fn commit_window_position(
     mut moved_windows: NativePositionWindows,
+    viewports: Query<&ProjectionViewport>,
+    pending: Query<(), With<ProjectionPending>>,
+    mut projections: Option<NonSendMut<crate::manager::projection::Projections>>,
+    mut exit: MessageWriter<AppExit>,
     mut commands: Commands,
 ) {
     let _measurement = crate::performance::measure(crate::performance::Metric::Move);
@@ -1180,7 +1190,7 @@ pub(super) fn commit_window_position(
             // Artificial parking coordinates reverse the apparent direction of
             // a returning left neighbor. Move visible leaders out of its slot
             // before revealing it; park departing bodies before either group.
-            let phase = if parked.is_some() {
+            let phase = if parked.is_some() || viewports.get(entity).is_ok_and(|v| v.hidden) {
                 0
             } else if revealing {
                 2
@@ -1192,9 +1202,23 @@ pub(super) fn commit_window_position(
         .collect::<Vec<_>>();
     moves.sort_unstable_by_key(|(key, _)| *key);
     for (_, entity) in moves {
+        if pending.contains(entity) {
+            continue;
+        }
         if let Ok((_, mut window, position, parked, verification, revealing, bounds, edge)) =
             moved_windows.get_mut(entity)
         {
+            if let (Some(backend), Ok(viewport)) = (projections.as_mut(), viewports.get(entity)) {
+                let target = IRect::from_corners(position.0, position.0 + bounds.0);
+                if let Err(error) =
+                    super::projection::commit(backend, &mut window, *viewport, target)
+                {
+                    error!(window_id = window.id(), %error, "fixed-size presentation failed");
+                    exit.write(AppExit::error());
+                }
+                commands.entity(entity).try_remove::<NativeReveal>();
+                continue;
+            }
             objc2::rc::autoreleasepool(|_| {
                 if let Some(parking) = parked {
                     // Fit the native presentation before changing displays. Otherwise
@@ -1232,7 +1256,10 @@ pub(super) fn commit_window_position(
 
 #[instrument(level = Level::TRACE, skip_all)]
 pub(super) fn verify_window_position(
-    mut windows: Populated<(Entity, &mut Window, &Position, &mut VerifyWindowPosition)>,
+    mut windows: Populated<
+        (Entity, &mut Window, &Position, &mut VerifyWindowPosition),
+        Without<ProjectionPending>,
+    >,
     mut commands: Commands,
 ) {
     for (entity, mut window, position, mut verification) in &mut windows {
@@ -1331,8 +1358,15 @@ pub(crate) fn cleanup_on_exit(
     displays: Query<&Display>,
     window_manager: Res<WindowManager>,
     mut overlay_mgr: Option<NonSendMut<OverlayManager>>,
+    mut projections: Option<NonSendMut<crate::manager::projection::Projections>>,
 ) {
     for _ in exit_events.read() {
+        if let Some(backend) = projections.as_mut() {
+            backend.clear();
+        }
+        for mut window in &mut all_windows {
+            window.set_presentation_offset(bevy::math::IVec2::ZERO);
+        }
         let ids = all_windows.iter().map(|w| w.id()).collect::<Vec<_>>();
         info!("exit cleanup: restoring {} window(s)", ids.len());
         window_manager.dim_windows(&ids, 0.0);
@@ -1818,6 +1852,7 @@ mod geometry_echo_tests {
         use std::sync::{Arc, Mutex};
         let writes = Arc::new(Mutex::new(Vec::new()));
         let mut world = bevy::prelude::World::new();
+        world.init_resource::<bevy::ecs::message::Messages<AppExit>>();
         let mut returning = None;
         for (id, frame, target, revealing) in [
             (

@@ -34,6 +34,19 @@ release script's provenance checks.
 
 ## Working setup
 
+**23 October investigation update:** `fix/stable-native-content` adds a
+fixture-only signed-app diagnostic and the
+[fixed-width edge investigation](docs/fixed-width-edge-investigation.md).
+Independent readback invalidated direct foreign-window crop calls. A later
+app-owned compositor-space proof preserves full-size content and owner-only
+peeks on both monitors, including a separately launched signed fixture and 50
+motion observations. The integrated signed diagnostic engine passed 21 native
+two-monitor checks, and live WebKit fixtures passed 50 motion observations per
+direction without viewport resize. Source now defaults to projection when the
+macOS 26+ runtime supports it; older/unsupported systems retain compatibility.
+The normal signed build/exact-build confirmation are in progress. Read the
+investigation for receipt paths, failed attempts and remaining app/compositor QA.
+
 - Canonical checkout: `/Users/neat/dev/Ribbon`, outside iCloud sync. Historical
   Documents/Codex paths may be symlinks or evidence references. Do not move back.
 - Requirements: Apple silicon, macOS 15+, Xcode 26+ with Icon Composer support,

@@ -57,6 +57,7 @@ pub(crate) mod app;
 mod display;
 mod frame;
 mod process;
+pub(crate) mod projection;
 mod skylight;
 mod windows;
 

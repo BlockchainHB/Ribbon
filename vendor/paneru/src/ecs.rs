@@ -47,6 +47,7 @@ pub mod layout_ops;
 mod motion;
 pub mod mouse;
 pub mod params;
+pub(crate) mod projection;
 pub(crate) mod restore;
 pub mod script_state;
 pub mod scroll;
@@ -269,6 +270,8 @@ pub fn register_systems(app: &mut bevy::app::App) {
                 .run_if(resource_exists::<LowPowerMode>)
                 .run_if(on_timer(LOW_POWER_MODE_CHECK)),
             restore::tick_restore_grace,
+            projection::reset_policy,
+            projection::synchronize_spaces.run_if(resource_exists::<projection::ProjectionEnabled>),
             state::periodic_state_save.run_if(on_timer(Duration::from_mins(5))),
             state::cleanup_on_exit,
             script_state::periodic_script_state_save.run_if(on_timer(Duration::from_mins(5))),
@@ -284,10 +287,12 @@ pub fn register_systems(app: &mut bevy::app::App) {
         (
             systems::animate_entities,
             systems::animate_resize_entities,
+            projection::prepare.run_if(not(resource_exists::<Initializing>)),
             systems::commit_window_shrink.run_if(not(resource_exists::<Initializing>)),
             systems::commit_window_position.run_if(not(resource_exists::<Initializing>)),
             systems::verify_window_position.run_if(not(resource_exists::<Initializing>)),
             systems::commit_window_size.run_if(not(resource_exists::<Initializing>)),
+            projection::refresh_after_resize.run_if(not(resource_exists::<Initializing>)),
         )
             .chain()
             .in_set(PostUpdateSet::Animate),
@@ -335,6 +340,8 @@ pub fn register_triggers(app: &mut bevy::app::App) {
             .before(focus::fix_window_size_on_focus),
     );
     app.add_observer(triggers::window_unmanaged_trigger)
+        .add_observer(projection::unmanage)
+        .add_observer(projection::enter_fullscreen)
         .add_observer(triggers::window_managed_trigger)
         .add_observer(triggers::window_minimized_trigger)
         .add_observer(triggers::spawn_window_trigger)
@@ -833,6 +840,8 @@ pub fn setup_bevy_app(sender: EventSender, receiver: Receiver<Event>) -> Result<
     }
 
     let mut app = BevyApp::new();
+
+    projection::initialize(&mut app)?;
 
     app.add_plugins(MinimalPlugins)
         // `add_message`, not `init_resource`: the latter never registers the

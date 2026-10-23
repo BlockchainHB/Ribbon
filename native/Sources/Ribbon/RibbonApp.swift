@@ -7,6 +7,7 @@ import SwiftUI
 @MainActor
 enum RibbonEntry {
   static func main() {
+    if NativeEdgeVerification.startIfRequested() { return }
     if CommandLine.arguments.contains("--print-config") {
       do { print(try RibbonSettings().engineConfiguration()) } catch {
         fputs("\(error)\n", stderr)

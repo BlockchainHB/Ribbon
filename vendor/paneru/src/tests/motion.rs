@@ -44,7 +44,7 @@ fn scrolling_resizing_and_reordering_preserve_separation_each_frame() {
             let visible = world
                 .query::<&Window>()
                 .iter(world)
-                .map(|window| window.frame())
+                .map(Window::frame)
                 .filter(|frame| {
                     let visible_width = frame.max.x.min(TEST_DISPLAY_WIDTH) - frame.min.x.max(0);
                     visible_width > frame.width() / 2

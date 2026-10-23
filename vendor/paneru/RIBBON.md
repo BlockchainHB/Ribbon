@@ -10,6 +10,20 @@ The upstream default-feature test suite is also retained.
 
 Local changes:
 
+- Fixed-content presentation on supported macOS 26+ runtimes:
+  `manager/projection.rs` owns main-thread compositor handles and a mockable
+  native boundary. `ecs/projection.rs` controls asynchronous preparation,
+  active-native-Space visibility, projection/reveal and resource cleanup.
+  `Window` normalizes AX coordinates with a presentation offset while its
+  underlying native frame stays on the owning display. Full logical bounds
+  bypass edge-width fitting; focus waits for ordinary coordinates on reveal.
+  Native writes retain departure/leader/reveal ordering. Native fullscreen
+  strips retire projection and retain native presentation. Unsupported runtimes
+  keep compatibility; `RIBBON_NATIVE_PROJECTION=0` explicitly selects it, while
+  `=1` requires the new backend. See
+  `../../docs/fixed-width-edge-investigation.md` for independent pixel evidence
+  and remaining limitations. No dependency or upstream pin changes.
+
 - Startup visibility: fit newly adopted oversized tiled columns to their own
   monitor's usable width when compact parking is enabled. Native maximized
   windows otherwise exceed the viewport after padding and can be parked at

@@ -558,7 +558,7 @@ fn commit_native_focus(
         // A compact tile may still live at another monitor's outer corner.
         // Focusing there can activate that monitor's last key window instead.
         // Keep the request coalesced while geometry continues revealing it.
-        if windows.is_parked(entity) {
+        if !windows.native_focus_ready(entity) {
             continue;
         }
         commands.entity(entity).try_remove::<PendingNativeFocus>();

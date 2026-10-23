@@ -205,6 +205,7 @@ pub struct FrameActivity<'w, 's> {
     resizing: Query<'w, 's, (), With<ResizeMarker>>,
     scrolling: Query<'w, 's, (), With<Scrolling>>,
     flash_messages: Query<'w, 's, (), With<FlashMessage>>,
+    projection_pending: Query<'w, 's, (), With<super::projection::ProjectionPending>>,
 }
 
 impl FrameActivity<'_, '_> {
@@ -215,6 +216,7 @@ impl FrameActivity<'_, '_> {
             || !self.resizing.is_empty()
             || !self.scrolling.is_empty()
             || !self.flash_messages.is_empty()
+            || !self.projection_pending.is_empty()
     }
 }
 
@@ -270,6 +272,8 @@ pub struct Windows<'w, 's> {
     >,
     positions: WindowPlacements<'w, 's>,
     parked: Query<'w, 's, (), With<crate::ecs::layout::parking::CompactParked>>,
+    projections: Query<'w, 's, &'static super::projection::ProjectionViewport>,
+    projection_pending: Query<'w, 's, (), With<super::projection::ProjectionPending>>,
     preferred: Query<'w, 's, &'static crate::ecs::layout::width_policy::PreferredWidth>,
 }
 
@@ -282,7 +286,13 @@ impl Windows<'_, '_> {
             .or_else(|| self.moving_frame(entity).map(|frame| frame.width()))
     }
     pub fn is_parked(&self, entity: Entity) -> bool {
-        self.parked.contains(entity)
+        self.parked.contains(entity) || self.projections.get(entity).is_ok_and(|v| v.hidden)
+    }
+    pub fn native_focus_ready(&self, entity: Entity) -> bool {
+        !self.is_parked(entity)
+            && !self.projections.get(entity).is_ok_and(|v| v.suspended)
+            && !self.projection_pending.contains(entity)
+            && self.get(entity).is_none_or(|window| !window.is_projected())
     }
     fn get_all(&self, entity: Entity) -> Option<(&Window, Entity, &ChildOf, Option<&Unmanaged>)> {
         self.all

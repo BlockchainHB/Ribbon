@@ -200,6 +200,7 @@ impl Plugin for LayoutEventsPlugin {
             )
                 .chain()
                 .after(super::systems::animate_resize_entities)
+                .before(super::projection::prepare)
                 .before(super::systems::commit_window_shrink)
                 .in_set(super::PostUpdateSet::Animate)
                 .run_if(not(resource_exists::<Initializing>)),
@@ -1820,6 +1821,8 @@ fn window_geometry_changed(windows: GeometryChanges) -> bool {
 
 struct PresentationContext {
     hidden: EntityHashSet,
+    suspended: EntityHashSet,
+    fullscreen: EntityHashSet,
     windows: EntityHashMap<StripWindowContext>,
     frames: EntityHashMap<IRect>,
 }
@@ -1830,8 +1833,11 @@ fn presentation_context(
     snap_guards: &Query<&SnapStripMarker>,
     displays: &DisplayViewports,
     config: &Config,
+    visible_spaces: Option<&super::projection::NativeVisibleSpaces>,
 ) -> PresentationContext {
     let mut hidden_windows = EntityHashSet::default();
+    let mut suspended = EntityHashSet::default();
+    let mut fullscreen = EntityHashSet::default();
     let mut strip_contexts = EntityHashMap::default();
     let mut current_frames = EntityHashMap::default();
     for (
@@ -1846,6 +1852,16 @@ fn presentation_context(
     {
         if hidden {
             hidden_windows.extend(layout_strip.all_windows());
+        }
+        if visible_spaces.is_some_and(|spaces| !spaces.visible.contains(&layout_strip.id())) {
+            suspended.extend(layout_strip.all_windows());
+        }
+        if visible_spaces.is_some_and(|spaces| spaces.fullscreen.contains(&layout_strip.id()))
+            || layout_strip
+                .columns()
+                .any(|column| matches!(column, Column::Fullscren(_)))
+        {
+            fullscreen.extend(layout_strip.all_windows());
         }
         // One animated origin per strip. Member windows follow that same frame;
         // independent easing lets neighbors catch up at different rates and overlap.
@@ -1876,6 +1892,8 @@ fn presentation_context(
 
     PresentationContext {
         hidden: hidden_windows,
+        suspended,
+        fullscreen,
         windows: strip_contexts,
         frames: current_frames,
     }
@@ -1898,6 +1916,7 @@ fn collect_parking_displays(displays: &DisplayViewports, config: &Config) -> Vec
 /// Reacts to changes of logical window layout in the strip and any have been changed, reposition
 /// the layout strip against the current display viewport.
 #[instrument(level = Level::DEBUG, skip_all)]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)] // Three mutually exclusive native presentation policies share one layout pass.
 fn position_layout_windows(
     positioned_windows: RepositionedWindows,
     workspaces: StripsForWindowPositioning,
@@ -1905,6 +1924,9 @@ fn position_layout_windows(
     displays: DisplayViewports,
     focused: Query<Entity, With<super::FocusedMarker>>,
     config: Res<Config>,
+    projection_enabled: Option<Res<super::projection::ProjectionEnabled>>,
+    projection_viewports: Query<&super::projection::ProjectionViewport>,
+    visible_spaces: Option<Res<super::projection::NativeVisibleSpaces>>,
     mut commands: Commands,
 ) {
     let _measurement = crate::performance::measure(crate::performance::Metric::Layout);
@@ -1916,6 +1938,7 @@ fn position_layout_windows(
         &snap_guards,
         &displays,
         &config,
+        visible_spaces.as_deref(),
     );
 
     for (
@@ -1947,6 +1970,59 @@ fn position_layout_windows(
         };
         frame.min += context.strip_position;
         frame.max += context.strip_position;
+
+        if projection_enabled.is_some()
+            && config.compact_parking()
+            && !presentation.fullscreen.contains(&entity)
+        {
+            use super::projection::{ProjectionViewport, native_body};
+            // Strip origins ease horizontally. Their initial Y can still be
+            // the unpadded display top, which makes AppKit shorten a full-height
+            // body before later focus restores it. Anchor all rows to the final
+            // usable top from the first native commit.
+            let dy = viewport.min.y - context.strip_position.y;
+            frame.min.y += dy;
+            frame.max.y += dy;
+            let (top, right, bottom, left) = config.edge_padding();
+            let clip = bevy::math::IRect::from_corners(
+                viewport.min - bevy::math::IVec2::new(left, top),
+                viewport.max + bevy::math::IVec2::new(right, bottom),
+            );
+            let hidden = presentation.hidden.contains(&entity);
+            if hidden {
+                let size = frame.size();
+                frame.min.x = viewport.max.x + 1;
+                frame.max = frame.min + size;
+            }
+            let body = native_body(
+                frame,
+                bevy::math::IVec2::new(h_pad, window.vertical_padding()),
+            );
+            let visible = body.intersect(clip).size();
+            let next = ProjectionViewport {
+                clip,
+                hidden: hidden || visible.x <= 0 || visible.y <= 0,
+                suspended: presentation.suspended.contains(&entity),
+            };
+            if projection_viewports.get(entity).ok() != Some(&next) {
+                commands.entity(entity).try_insert(next);
+            }
+            if was_compact || previous_edge.is_some() {
+                commands
+                    .entity(entity)
+                    .try_remove::<(CompactParked, EdgePresentation)>();
+                bounds.set_changed();
+            }
+            update_legacy_parking_state(&mut commands, entity, false, was_parked);
+            if resize.is_none() && bounds.0 != frame.size() {
+                bounds.0 = frame.size();
+            }
+            if position.0 != frame.min {
+                position.0 = frame.min;
+            }
+            commands.entity(entity).try_remove::<RepositionMarker>();
+            continue;
+        }
 
         if config.compact_parking() {
             let padding = bevy::math::IVec2::new(h_pad, window.vertical_padding());

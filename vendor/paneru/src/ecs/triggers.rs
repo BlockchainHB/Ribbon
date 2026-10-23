@@ -1454,8 +1454,13 @@ pub(super) fn refresh_configuration_trigger(
 pub(super) fn window_removal_trigger(
     trigger: On<Remove, Window>,
     mut workspaces: Query<&mut LayoutStrip>,
+    windows: Query<&Window>,
+    mut projections: Option<NonSendMut<crate::manager::projection::Projections>>,
 ) {
     let entity = trigger.event().entity;
+    if let (Some(backend), Ok(window)) = (projections.as_mut(), windows.get(entity)) {
+        backend.remove(window.id());
+    }
 
     if let Some(mut strip) = workspaces.iter_mut().find(|strip| strip.contains(entity)) {
         debug!(
