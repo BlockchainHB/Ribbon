@@ -1,33 +1,54 @@
-# Ribbon 0.2.0
+# Ribbon 0.2.0 beta 2
 
-Your windows, side by side.
+Smoother window movement, with less work behind it.
 
-The first public beta of Ribbon: a native scrolling window manager for Apple silicon Macs.
+Move left or right without losing the neighboring tile. When resizing makes
+room for a hidden window, it can return sooner and restores its visible size
+immediately, instead of waiting for a fixed-width cutoff.
 
-![Ribbon workspace](https://raw.githubusercontent.com/BlockchainHB/Ribbon/v0.2.0-beta.1/.github/assets/workspace.svg)
+![Ribbon workspace](https://raw.githubusercontent.com/BlockchainHB/Ribbon/v0.2.0-beta.2/.github/assets/workspace-agent.png)
 
-## In this release
+## What changed
 
-- Move through a horizontal strip with the keyboard or modifier-scroll.
-- Choose ⅓, ½, ⅔, ¾, or full width, or let fitting columns fill the available space.
-- Pair neighboring columns and use ½–½, ⅓–⅔, or ⅔–⅓ arrangements.
-- Find and reorder windows in the icon overview, including hidden tiles.
-- Use vertical stacks, independent display strips, and customizable shortcuts.
-- Manage normal open apps automatically, with exclusions when you need them.
-- Use the Cobalt app icon, adaptive appearances, and native sidebar settings.
+- More consistent movement in both directions and better visibility beside a
+  centered or resized window.
+- Safer ordering when tiles leave or return, including focusing hidden windows
+  through normal application activation.
+- Fewer native window queries and intermediate resize operations. Controlled
+  two-monitor fixture tests measured about **32% less engine CPU time** than the
+  uncapped, sequential comparison mode. This is not a system-wide or FPS claim.
+- More focused verification of resize returns, keyboard navigation, pairing and
+  recovery. App-imposed minimum sizes still apply.
+- A project handoff and agent guide for continuing development.
 
-## Install
+Pairing, independent thirds arrangements, vertical stacks, customizable
+shortcuts and automatic app inclusion with exclusions remain available.
 
-Download **Ribbon-macOS-arm64.zip**, unzip it, and move **Ribbon.app** to **Applications**. Open Ribbon, allow Accessibility access, then enable **Settings → General → Window management**.
+## Install or update
 
-Requires **Apple silicon** and **macOS 15 or later**. The release is Developer ID signed, notarized by Apple, and includes a stapled ticket. `SHA256SUMS.txt` and `release-manifest.json` provide archive integrity and source provenance.
+Download **Ribbon-macOS-arm64.zip**. Pause and quit an existing Ribbon session,
+unzip the archive, then replace **Ribbon.app** in **Applications**. Open it,
+allow Accessibility access if requested, and enable **Settings → General →
+Window management** when ready.
 
-[Getting started](https://github.com/BlockchainHB/Ribbon/blob/v0.2.0-beta.1/docs/GETTING_STARTED.md) · [Keyboard shortcuts](https://github.com/BlockchainHB/Ribbon#at-your-fingertips) · [Report an issue](https://github.com/BlockchainHB/Ribbon/issues)
+Requires **Apple silicon** and **macOS 15 or later**. Public packages must pass
+Developer ID signing, Apple notarization, stapling and Gatekeeper assessment.
+`SHA256SUMS.txt` and `release-manifest.json` accompany the verified archive.
+
+[Getting started](https://github.com/BlockchainHB/Ribbon/blob/v0.2.0-beta.2/docs/GETTING_STARTED.md) · [Keyboard shortcuts](https://github.com/BlockchainHB/Ribbon#at-your-fingertips) · [Report an issue](https://github.com/BlockchainHB/Ribbon/issues)
 
 ## Beta limits
 
-Pairs last for the current session. Some apps enforce minimum sizes, and macOS can leave a small edge of a hidden window visible. Physical multi-display pairing, mixed-scale transfers, reconnects, and sleep/wake need more testing. Intel builds and automatic updates are not included.
+The performance checkpoint was tested on both physical monitors. The final
+resize-return follow-up was verified on the laptop after relocation; fresh
+physical two-monitor verification of that follow-up remains outstanding. Native
+application activation was tested; actual Raycast Quicklink UI execution remains
+separate. Busy third-party redraw, compositor frame pacing, mixed-scale display
+transfers, reconnects and sleep/wake need further physical testing.
 
-Pause Ribbon before switching window managers. No account or telemetry is required.
+Pairs last for the current session. Some apps enforce minimum sizes, and macOS
+can leave a small edge of a hidden window visible. Intel builds and automatic
+updates are not included. Pause Ribbon before switching window managers.
 
-Built on [Paneru](https://github.com/karinushka/paneru), with upstream MIT notices preserved.
+No account or telemetry is required. Built on
+[Paneru](https://github.com/karinushka/paneru), with upstream MIT notices preserved.

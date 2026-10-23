@@ -8,7 +8,7 @@
 <p align="center">A scrolling window manager for macOS.</p>
 
 <p align="center">
-  <a href="https://github.com/BlockchainHB/Ribbon/releases/download/v0.2.0-beta.1/Ribbon-macOS-arm64.zip">Download for Mac</a>
+  <a href="https://github.com/BlockchainHB/Ribbon/releases/download/v0.2.0-beta.2/Ribbon-macOS-arm64.zip">Download for Mac</a>
   &nbsp;·&nbsp;
   <a href="docs/GETTING_STARTED.md">Getting started</a>
   &nbsp;·&nbsp;
@@ -30,7 +30,7 @@ Ribbon arranges windows; it does not run agents or connect to their sessions. No
 
 Requires **macOS 15 or later** and **Apple silicon**. The first public release is a beta.
 
-1. [Download Ribbon](https://github.com/BlockchainHB/Ribbon/releases/download/v0.2.0-beta.1/Ribbon-macOS-arm64.zip), unzip it, and move **Ribbon.app** to **Applications**.
+1. [Download Ribbon](https://github.com/BlockchainHB/Ribbon/releases/download/v0.2.0-beta.2/Ribbon-macOS-arm64.zip), unzip it, and move **Ribbon.app** to **Applications**.
 2. Allow **Ribbon** in **System Settings → Privacy & Security → Accessibility**.
 3. Open **Ribbon → Settings → General** and turn on **Window management**.
 
@@ -79,7 +79,7 @@ scripts/verify.sh
 
 SwiftUI and AppKit own configuration and engine lifecycle. The Rust engine owns window layout, focus, and gestures. It is based on a checked-in Paneru snapshot; local changes are documented in [vendor/paneru/RIBBON.md](vendor/paneru/RIBBON.md).
 
-[Development notes](docs/DEVELOPMENT.md) · [Release process](docs/RELEASING.md) · [Website](website/README.md)
+[Project handoff](HANDOFF.md) · [Development notes](docs/DEVELOPMENT.md) · [Release process](docs/RELEASING.md) · [Website](website/README.md)
 
 </details>
 
