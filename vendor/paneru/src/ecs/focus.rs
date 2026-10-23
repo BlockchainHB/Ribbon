@@ -7,7 +7,7 @@ use bevy::ecs::entity::Entity;
 use bevy::ecs::hierarchy::ChildOf;
 use bevy::ecs::lifecycle::{Add, Remove};
 use bevy::ecs::observer::On;
-use bevy::ecs::query::{Added, Has, With, Without};
+use bevy::ecs::query::{Added, Has, Or, With, Without};
 use bevy::ecs::resource::Resource;
 use bevy::ecs::schedule::IntoScheduleConfigs as _;
 use bevy::ecs::system::{Commands, Populated, Query, Res, Single};
@@ -548,17 +548,22 @@ fn focus_window_trigger(
         .try_insert(PendingNativeFocus { raise });
 }
 
+type MovingFocusStrips<'w, 's> =
+    Query<'w, 's, &'static LayoutStrip, Or<(With<RepositionMarker>, With<Scrolling>)>>;
+
 fn commit_native_focus(
     pending: Populated<(Entity, &PendingNativeFocus, Has<VerifyFocus>)>,
     windows: Windows,
     apps: Query<&Application>,
+    moving_strips: MovingFocusStrips,
     mut commands: Commands,
 ) {
     for (entity, request, verify) in pending {
         // A compact tile may still live at another monitor's outer corner.
         // Focusing there can activate that monitor's last key window instead.
         // Keep the request coalesced while geometry continues revealing it.
-        if !windows.native_focus_ready(entity) {
+        let strip_settled = !moving_strips.iter().any(|strip| strip.contains(entity));
+        if !windows.native_focus_ready(entity, strip_settled) {
             continue;
         }
         commands.entity(entity).try_remove::<PendingNativeFocus>();
@@ -744,6 +749,69 @@ mod tests {
         assert_eq!(calls.load(Ordering::Relaxed), 1);
         assert!(world.get::<PendingNativeFocus>(target).is_none());
         assert!(!world.get::<Timeout>(target).unwrap().timer.is_finished());
+    }
+
+    #[test]
+    fn oversized_projected_window_receives_focus_after_its_owner_strip_settles() {
+        use crate::ecs::projection::ProjectionViewport;
+        use crate::ecs::{LayoutPosition, WidthRatio};
+        use bevy::math::IVec2;
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut world = World::new();
+        let mut api = MockApplicationApi::new();
+        api.expect_psn()
+            .return_const(crate::platform::ProcessSerialNumber::default());
+        let app = world.spawn(Application::new(Box::new(api))).id();
+        let mut api = MockWindowApi::new();
+        api.expect_id().return_const(1);
+        api.expect_frame()
+            .return_const(IRect::new(-188, 20, 1212, 768));
+        api.expect_horizontal_padding().return_const(0);
+        api.expect_vertical_padding().return_const(0);
+        let counter = calls.clone();
+        api.expect_focus_with_raise().times(1).returning(move |_| {
+            counter.fetch_add(1, Ordering::Relaxed);
+        });
+        let mut window = Window::new(Box::new(api));
+        window.set_presentation_offset(IVec2::new(188, 0));
+        let target = world
+            .spawn((
+                window,
+                ChildOf(app),
+                PendingNativeFocus { raise: true },
+                VerifyFocus,
+                LayoutPosition(IVec2::ZERO),
+                Position(IVec2::new(0, 20)),
+                Bounds(IVec2::new(1400, 748)),
+                WidthRatio(1.4),
+                ProjectionViewport {
+                    clip: IRect::new(0, 20, 1024, 768),
+                    hidden: false,
+                    suspended: false,
+                },
+            ))
+            .id();
+        let mut strip = LayoutStrip::new(3, 0);
+        strip.append(target);
+        let strip = world.spawn((strip, RepositionMarker(IVec2::ZERO))).id();
+        let commit = world.register_system(commit_native_focus);
+        world.run_system(commit).unwrap();
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+        assert!(world.get::<PendingNativeFocus>(target).is_some());
+        assert!(world.get::<Timeout>(target).is_none());
+        world.entity_mut(strip).remove::<RepositionMarker>();
+        world.run_system(commit).unwrap();
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+        assert!(world.get::<PendingNativeFocus>(target).is_none());
+        assert!(
+            world.get::<Window>(target).unwrap().is_projected(),
+            "focus must not require shrinking a native minimum to fit"
+        );
+        assert!(world.get::<Timeout>(target).is_some());
     }
 
     #[test]

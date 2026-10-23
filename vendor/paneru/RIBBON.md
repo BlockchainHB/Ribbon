@@ -10,6 +10,11 @@ The upstream default-feature test suite is also retained.
 
 Local changes:
 
+- Oversized-minimum focus: a safely owner-anchored projected window can receive
+  native focus after its strip and native geometry settle, even when its minimum
+  size cannot fit inside the viewport. Ordinary partial/parked/pending windows
+  still defer focus. Includes a regression and opt-in oversized native fixtures.
+
 - Fixed-content presentation on supported macOS 26+ runtimes:
   `manager/projection.rs` owns main-thread compositor handles and a mockable
   native boundary. `ecs/projection.rs` controls asynchronous preparation,

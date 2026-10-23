@@ -8,6 +8,7 @@ struct FixtureFrame: Codable {
   let x: Double, y: Double, width: Double, height: Double
   let focused: Bool
   let screenID: UInt32
+  let minimumWidth: Double?
   func matches(_ other: Self) -> Bool {
     abs(x - other.x) < 4 && abs(y - other.y) < 4 && abs(width - other.width) < 4
       && abs(height - other.height) < 4
@@ -133,8 +134,14 @@ enum DesktopVerification {
       }
       report.checks.append(Check(name: "start and exact application scope", passed: true))
       if fixedContent {
-        try await verifyFixedContent(controller, fixture: fixture, report: &report)
-        if CommandLine.arguments.contains("--qa-pairing") {
+        if CommandLine.arguments.contains("--qa-oversized") {
+          try await verifyOversizedFocus(controller, fixture: fixture, report: &report)
+        } else {
+          try await verifyFixedContent(controller, fixture: fixture, report: &report)
+        }
+        if CommandLine.arguments.contains("--qa-pairing")
+          && !CommandLine.arguments.contains("--qa-oversized")
+        {
           try await verifyPairing(controller, fixture: fixture, report: &report)
         }
       } else if CommandLine.arguments.contains("--qa-maximized-startup") {
