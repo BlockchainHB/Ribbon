@@ -124,6 +124,9 @@ impl Plugin for FocusEventsPlugin {
             PostUpdate,
             (
                 clear_pending_focus_layout.in_set(super::PostUpdateSet::Bookkeeping),
+                commit_native_focus
+                    .in_set(super::PostUpdateSet::Ui)
+                    .before(mouse_follows_focus),
                 mouse_follows_focus.in_set(super::PostUpdateSet::Ui),
                 recover_lost_focus
                     .in_set(super::PostUpdateSet::Bookkeeping)
@@ -235,15 +238,22 @@ fn shares_a_tab_group(
         })
 }
 
+type FocusSizeWindows<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static mut Window,
+        &'static mut Bounds,
+        Has<ResizeMarker>,
+        Has<crate::ecs::layout::parking::CompactParked>,
+        Has<crate::ecs::layout::parking::EdgePresentation>,
+    ),
+>;
+
 #[instrument(level = Level::DEBUG, skip_all, fields(focused))]
 pub(super) fn fix_window_size_on_focus(
     focused: Single<(Entity, Has<VerifyWindowSize>), Added<FocusedMarker>>,
-    mut windows: Query<(
-        &mut Window,
-        &mut Bounds,
-        Has<ResizeMarker>,
-        Has<crate::ecs::layout::parking::CompactParked>,
-    )>,
+    mut windows: FocusSizeWindows,
     mut commands: Commands,
 ) {
     let (entity, verify_size) = *focused;
@@ -253,9 +263,10 @@ pub(super) fn fix_window_size_on_focus(
     if let Ok(mut entity_commands) = commands.get_entity(entity) {
         entity_commands.try_remove::<VerifyWindowSize>();
     }
-    if let Ok((mut window, mut bounds, resizing, parked)) = windows.get_mut(entity)
+    if let Ok((mut window, mut bounds, resizing, parked, clipped)) = windows.get_mut(entity)
         && !resizing
         && !parked
+        && !clipped
         && let Ok(frame) = window.update_frame()
         && frame.size() != bounds.0
     {
@@ -282,9 +293,16 @@ fn maintain_verify_focus_singleton(
     }
 }
 
+type FocusRejections<'w, 's> = Populated<
+    'w,
+    's,
+    (Entity, &'static Window, &'static ChildOf, &'static Timeout),
+    (With<VerifyFocus>, Without<PendingNativeFocus>),
+>;
+
 #[instrument(level = Level::DEBUG, skip_all)]
 fn detect_focus_rejection(
-    pending: Populated<(Entity, &Window, &ChildOf, &Timeout), With<VerifyFocus>>,
+    pending: FocusRejections,
     apps: Query<&Application>,
     mut workspaces: Query<(Entity, &mut LayoutStrip)>,
     windows: Windows,
@@ -499,34 +517,70 @@ fn virtual_strip_activated(
     }
 }
 
+/// Coalesce focus requests, but commit geometry before the potentially blocking
+/// cross-process AX raise. A parked tile must not hold up the first motion frame.
+#[derive(Component)]
+struct PendingNativeFocus {
+    raise: bool,
+}
+
 fn focus_window_trigger(
     trigger: On<FocusWindow>,
-    windows: Windows,
-    apps: Query<&Application>,
+    pending: Query<Entity, With<PendingNativeFocus>>,
     verifying: Query<Entity, With<VerifyFocus>>,
     mut commands: Commands,
 ) {
     let FocusWindow { entity, raise } = *trigger.event();
-    for other in verifying {
-        if other != entity
-            && let Ok(mut entity_commands) = commands.get_entity(other)
-        {
-            entity_commands.try_remove::<(Timeout, VerifyFocus)>();
+    for other in pending {
+        if other != entity {
+            commands.entity(other).try_remove::<PendingNativeFocus>();
         }
     }
-    let Some(window) = windows.get(entity) else {
-        return;
-    };
-    let Some(psn) = windows.psn(window.id(), &apps) else {
-        return;
-    };
-    if !raise
-        && let Some((focused_window, _)) = windows.focused()
-        && let Some(focused_psn) = windows.psn(focused_window.id(), &apps)
-    {
-        window.focus_without_raise(psn, focused_window, focused_psn);
-    } else {
-        window.focus_with_raise(psn);
+    for other in verifying {
+        if other != entity {
+            commands
+                .entity(other)
+                .try_remove::<(Timeout, VerifyFocus)>();
+        }
+    }
+    commands
+        .entity(entity)
+        .try_insert(PendingNativeFocus { raise });
+}
+
+fn commit_native_focus(
+    pending: Populated<(Entity, &PendingNativeFocus, Has<VerifyFocus>)>,
+    windows: Windows,
+    apps: Query<&Application>,
+    mut commands: Commands,
+) {
+    for (entity, request, verify) in pending {
+        // A compact tile may still live at another monitor's outer corner.
+        // Focusing there can activate that monitor's last key window instead.
+        // Keep the request coalesced while geometry continues revealing it.
+        if windows.is_parked(entity) {
+            continue;
+        }
+        commands.entity(entity).try_remove::<PendingNativeFocus>();
+        let Some(window) = windows.get(entity) else {
+            continue;
+        };
+        let Some(psn) = windows.psn(window.id(), &apps) else {
+            continue;
+        };
+        if !request.raise
+            && let Some((focused_window, _)) = windows.focused()
+            && let Some(focused_psn) = windows.psn(focused_window.id(), &apps)
+        {
+            window.focus_without_raise(psn, focused_window, focused_psn);
+        } else {
+            window.focus_with_raise(psn);
+        }
+        if verify {
+            commands
+                .entity(entity)
+                .try_insert(Timeout::for_component::<VerifyFocus>(VERIFY_FOCUS_TIMEOUT));
+        }
     }
 }
 
@@ -643,6 +697,53 @@ mod tests {
         let mut timeout = Timeout::for_component::<VerifyFocus>(VERIFY_FOCUS_TIMEOUT);
         timeout.timer.tick(VERIFY_FOCUS_TIMEOUT);
         timeout
+    }
+
+    #[test]
+    fn parked_focus_waits_for_reveal_and_does_not_start_rejection_verification() {
+        use crate::ecs::layout::parking::CompactParked;
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut world = World::new();
+        let mut app_api = MockApplicationApi::new();
+        app_api
+            .expect_psn()
+            .return_const(crate::platform::ProcessSerialNumber::default());
+        let app = world.spawn(Application::new(Box::new(app_api))).id();
+        let mut api = MockWindowApi::new();
+        api.expect_id().return_const(1);
+        let counter = calls.clone();
+        api.expect_focus_with_raise().times(1).returning(move |_| {
+            counter.fetch_add(1, Ordering::Relaxed);
+        });
+        let target = world
+            .spawn((
+                Window::new(Box::new(api)),
+                ChildOf(app),
+                PendingNativeFocus { raise: true },
+                VerifyFocus,
+                expired_verify_timeout(),
+                CompactParked {
+                    size_limit: bevy::math::IVec2::splat(1000),
+                },
+            ))
+            .id();
+        let commit = world.register_system(commit_native_focus);
+        let reject = world.register_system(detect_focus_rejection);
+        world.run_system(commit).unwrap();
+        _ = world.run_system(reject);
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+        assert!(world.get::<PendingNativeFocus>(target).is_some());
+        assert!(world.get::<VerifyFocus>(target).is_some());
+        assert!(world.get::<Unmanaged>(target).is_none());
+        world.entity_mut(target).remove::<CompactParked>();
+        world.run_system(commit).unwrap();
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+        assert!(world.get::<PendingNativeFocus>(target).is_none());
+        assert!(!world.get::<Timeout>(target).unwrap().timer.is_finished());
     }
 
     #[test]

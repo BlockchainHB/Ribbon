@@ -25,6 +25,7 @@ pub struct Display {
     /// Optional config override for the menubar height.
     menubar_height_override: Option<i32>,
     notch_height: i32,
+    animation_interval: f64,
 }
 
 impl Display {
@@ -47,7 +48,24 @@ impl Display {
             menubar_height,
             menubar_height_override: None,
             notch_height: 0,
+            animation_interval: 1.0 / 120.0,
         }
+    }
+
+    /// Cache display timing with the topology; never query the OS during animation.
+    pub fn with_refresh_rate(mut self, hz: f64) -> Self {
+        // Variable-refresh modes can report zero. Keep a 120 Hz ceiling then.
+        self.animation_interval = 1.0
+            / if hz.is_finite() && hz >= 30.0 {
+                hz.min(240.0)
+            } else {
+                120.0
+            };
+        self
+    }
+
+    pub fn animation_interval(&self) -> f64 {
+        self.animation_interval
     }
 
     /// Converts a `CGDirectDisplayID` to a `CFUUID` string.

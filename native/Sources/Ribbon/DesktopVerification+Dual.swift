@@ -68,6 +68,7 @@ extension DesktopVerification {
     try await focusFixture(source.id, fixture: fixture, controller: controller)
     await controller.send(.width)
     let beforeMove = try await settledFrames(fixture)
+    let beforeMoveState = try JSONDecoder().decode(EngineState.self, from: await controller.query())
     let moving = beforeMove.first { $0.id == source.id }!
     let padding = Double(controller.settings.windowPadding * 2)
     let screenWidths = Dictionary(
@@ -93,10 +94,12 @@ extension DesktopVerification {
       try require(
         abs(moved.width - expectedWidth) < 4,
         "Transfer preserves the width proportion on a differently sized display")
-      try require(
-        beforeMove.filter { $0.id != source.id }.allSatisfy { old in
-          transferred.contains { $0.id == old.id && abs($0.width - old.width) < 4 }
-        }, "Transfer preserves the other windows' widths")
+      let transferredState = try JSONDecoder().decode(
+        EngineState.self, from: await controller.query())
+      try requirePreservedWidths(
+        from: beforeMoveState, to: transferredState,
+        excluding: Int32(source.id), message: "Transfer preserves the other windows' logical widths"
+      )
       await controller.send(.nextDisplay)
       try await eventually("Window transferred back to its original monitor") {
         try frames(fixture).contains {
@@ -115,6 +118,7 @@ extension DesktopVerification {
       Check(
         name: "six physical display transfers preserve proportions and other widths", passed: true))
     let beforeNew = try await settledFrames(fixture)
+    let beforeNewState = try JSONDecoder().decode(EngineState.self, from: await controller.query())
     DistributedNotificationCenter.default().postNotificationName(
       NSNotification.Name("dev.ribbon.fixture.add-window"), object: nil, userInfo: nil,
       deliverImmediately: true)
@@ -127,13 +131,17 @@ extension DesktopVerification {
     let added = afterNew.first { new in !beforeNew.contains { $0.id == new.id } }!
     try require(added.screenID == targetID, "New window stays on the display where it opened")
     try await verifyOwnership(controller, fixture: fixture, expected: original)
+    let afterNewState = try JSONDecoder().decode(EngineState.self, from: await controller.query())
+    try requirePreservedWidths(
+      from: beforeNewState, to: afterNewState,
+      message: "Opening on one display preserves logical widths")
     try require(
-      beforeNew.allSatisfy { old in
-        afterNew.contains {
-          $0.id == old.id && abs($0.width - old.width) < 4
-            && (old.screenID == added.screenID || $0.matches(old))
+      beforeNew.filter { frame in
+        beforeNewState.windows.contains {
+          $0.windowID == Int32(frame.id) && $0.displayID != targetID
         }
-      }, "Opening on one display preserves widths and the other strip's positions")
+      }.allSatisfy { old in afterNew.contains { $0.id == old.id && $0.matches(old) } },
+      "Opening on one display preserves the other strip's positions")
     report.checks.append(
       Check(name: "opening a window preserves both monitors' existing widths", passed: true))
   }

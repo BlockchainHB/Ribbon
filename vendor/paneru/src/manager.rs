@@ -13,8 +13,8 @@ use objc2_core_foundation::{
 };
 use objc2_core_graphics::{
     CGAssociateMouseAndMouseCursorPosition, CGDirectDisplayID, CGDisplayBounds,
-    CGGetActiveDisplayList, CGWarpMouseCursorPosition, CGWindowListCopyWindowInfo,
-    CGWindowListOption, kCGNullWindowID, kCGWindowNumber,
+    CGDisplayCopyDisplayMode, CGDisplayMode, CGGetActiveDisplayList, CGWarpMouseCursorPosition,
+    CGWindowListCopyWindowInfo, CGWindowListOption, kCGNullWindowID, kCGWindowNumber,
 };
 use std::path::Path;
 use std::ptr::null_mut;
@@ -55,6 +55,7 @@ pub use windows::MockWindowApi;
 
 pub(crate) mod app;
 mod display;
+mod frame;
 mod process;
 mod skylight;
 mod windows;
@@ -388,7 +389,10 @@ impl WindowManagerApi for WindowManagerOS {
                     .ok()?;
 
                 Some((
-                    Display::new(id, irect_from(bounds), menubar_height.cast_signed()),
+                    Display::new(id, irect_from(bounds), menubar_height.cast_signed())
+                        .with_refresh_rate(CGDisplayMode::refresh_rate(
+                            CGDisplayCopyDisplayMode(id).as_deref(),
+                        )),
                     workspaces,
                 ))
             })

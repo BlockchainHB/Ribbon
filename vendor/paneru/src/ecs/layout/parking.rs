@@ -11,6 +11,52 @@ pub(crate) struct CompactParked {
     pub size_limit: IVec2,
 }
 
+/// One native commit fence: make room before a parked body returns to view.
+#[derive(Component)]
+pub(crate) struct NativeReveal;
+
+/// A clipped native presentation. The strip retains the full logical width.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct EdgePresentation {
+    pub frame: IRect,
+    pub fallback: ParkedGeometry,
+}
+
+/// Learned from an AX resize rejection, so a narrow edge is not retried each frame.
+#[derive(Component)]
+pub(crate) struct NativeMinimumWidth(pub i32);
+
+/// Foreign windows cannot be masked at a display seam. Fit their native body
+/// into the visible slot while leaving strip packing and preferred widths alone.
+pub(super) fn visible_edge_frame(
+    frame: IRect,
+    viewport: IRect,
+    minimum_width: i32,
+) -> Option<IRect> {
+    let mut visible = frame;
+    visible.min.x = frame.min.x.max(viewport.min.x);
+    visible.max.x = frame.max.x.min(viewport.max.x);
+    (visible.width() >= minimum_width.max(1)).then_some(visible)
+}
+
+pub(super) fn update_legacy_parking_state(
+    commands: &mut Commands,
+    entity: Entity,
+    parked: bool,
+    was_parked: bool,
+) {
+    if parked == was_parked {
+        return;
+    }
+    if parked {
+        commands.entity(entity).try_insert(AdjacentDisplayParked);
+    } else {
+        commands
+            .entity(entity)
+            .try_remove::<AdjacentDisplayParked>();
+    }
+}
+
 pub(super) fn update_parking_state(
     commands: &mut Commands,
     entity: Entity,
@@ -38,9 +84,77 @@ pub(super) struct ParkingDisplay {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct ParkedGeometry {
+pub(crate) struct ParkedGeometry {
     pub frame: IRect,
     pub size_limit: IVec2,
+}
+
+pub(super) struct CompactPresentation {
+    pub frame: IRect,
+    pub edge: Option<EdgePresentation>,
+    pub parking_limit: Option<IVec2>,
+}
+
+/// Update presentation markers only when their meaning changes. Return whether
+/// native size needs restoring even though the logical Bounds did not change.
+pub(super) fn update_native_presentation(
+    commands: &mut Commands,
+    entity: Entity,
+    presentation: &CompactPresentation,
+    previous_edge: Option<EdgePresentation>,
+    was_parked: bool,
+) -> bool {
+    if presentation.edge != previous_edge {
+        if let Some(edge) = presentation.edge {
+            commands.entity(entity).try_insert(edge);
+        } else {
+            commands.entity(entity).try_remove::<EdgePresentation>();
+        }
+    }
+    if was_parked && presentation.parking_limit.is_none() {
+        commands.entity(entity).try_insert(NativeReveal);
+    }
+    update_parking_state(commands, entity, presentation.parking_limit, was_parked);
+    presentation.parking_limit.is_none()
+        && (was_parked || previous_edge.is_some() && presentation.edge.is_none())
+}
+
+pub(super) fn compact_presentation(
+    frame: IRect,
+    viewport: IRect,
+    owner: IRect,
+    displays: &[ParkingDisplay],
+    padding: IVec2,
+    state: (bool, bool),
+    minimum_width: i32,
+) -> CompactPresentation {
+    let (focused, hidden_workspace) = state;
+    let fallback = compact_parking(frame.size(), owner, displays, padding);
+    let hidden = hidden_workspace
+        || frame.max.x <= viewport.min.x + padding.x
+        || frame.min.x >= viewport.max.x - padding.x;
+    let oversized_focus = focused && frame.width() > viewport.width();
+    let edge = (!hidden
+        && !oversized_focus
+        && (frame.min.x + padding.x < owner.min.x || frame.max.x - padding.x > owner.max.x))
+        .then(|| visible_edge_frame(frame, viewport, minimum_width))
+        .flatten()
+        .map(|frame| EdgePresentation { frame, fallback });
+    let connected: Vec<_> = displays.iter().map(|d| d.bounds).collect();
+    let parked = hidden
+        || (!oversized_focus
+            && edge.is_none()
+            && (visible_edge_frame(frame, viewport, minimum_width).is_none()
+                || should_park_at_seam(frame, viewport, owner, &connected, padding, focused)));
+    CompactPresentation {
+        frame: if parked {
+            fallback.frame
+        } else {
+            edge.map_or(frame, |e| e.frame)
+        },
+        edge: (!parked).then_some(edge).flatten(),
+        parking_limit: parked.then_some(fallback.size_limit),
+    }
 }
 
 /// Keep only a one-point right edge in the desktop. Left-edge `AppKit` parking
@@ -238,6 +352,20 @@ pub(super) fn legacy_parking(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn returning_edge_uses_accepted_minimum_instead_of_a_fixed_reveal_threshold() {
+        let viewport = IRect::new(0, 30, 2560, 1440);
+        for width in [13, 40, 100, 199, 260] {
+            let logical = IRect::new(2560 - width, 30, 3200, 1440);
+            let exposed = visible_edge_frame(logical, viewport, 13).unwrap();
+            assert_eq!(exposed.width(), width);
+            assert_eq!(exposed.height(), 1410);
+            if width < 260 {
+                assert!(visible_edge_frame(logical, viewport, 260).is_none());
+            }
+        }
+    }
 
     #[test]
     fn partial_tile_parks_before_crossing_an_interior_monitor_seam() {

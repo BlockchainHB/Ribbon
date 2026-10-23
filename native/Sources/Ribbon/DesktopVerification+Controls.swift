@@ -32,8 +32,7 @@ extension DesktopVerification {
     AXValueGetValue(origin as! AXValue, .cgPoint, &p)
     AXValueGetValue(size as! AXValue, .cgSize, &s)
     let point = CGPoint(x: p.x + s.width / 2, y: p.y + s.height / 2)
-    if CommandLine.arguments.contains("--qa-maximized-startup"),
-      CommandLine.arguments.contains("--qa-external-input"),
+    if CommandLine.arguments.contains("--qa-external-input"),
       let index = CommandLine.arguments.firstIndex(of: "--qa-output")
     {
       let directory = URL(fileURLWithPath: CommandLine.arguments[index + 1])

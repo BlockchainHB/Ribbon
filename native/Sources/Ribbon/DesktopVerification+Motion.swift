@@ -31,6 +31,10 @@ extension DesktopVerification {
     }
     await controller.send(.first)
     _ = try await settledFrames(fixture)
+    // A strip that already fits is correctly clamped at its left edge.
+    // Give the scroll input a real overflow range on large external displays.
+    await controller.send(.fullWidth)
+    _ = try await settledFrames(fixture)
     let initial = try frames(fixture)
     guard let displayID = initial.first(where: \.focused)?.screenID else {
       throw VerificationError.failed("Motion fixture has no focused native window")
@@ -51,7 +55,11 @@ extension DesktopVerification {
         try await Task.sleep(for: .milliseconds(20))
       }
       try await eventually("Native modifier-scroll moves the fixture strip") {
-        try frames(fixture).contains { $0.id == first.id && abs($0.x - first.x) > 10 }
+        // Edge presentation can hold the visible origin at the viewport edge
+        // while the body narrows. That is native scrolling too.
+        try frames(fixture).contains {
+          $0.id == first.id && (abs($0.x - first.x) > 10 || abs($0.width - first.width) > 10)
+        }
       }
       report.checks.append(
         Check(name: "native modifier-scroll input moves the strip", passed: true))
@@ -122,7 +130,9 @@ extension DesktopVerification {
             x: other.frame.minX, y: top - other.frame.maxY, width: other.frame.width,
             height: other.frame.height)
           let overlap = rect.intersection(bounds)
-          return !overlap.isNull && (overlap.width > 1.1 || overlap.height > 33)
+          // Compact parking permits a one-point outer edge. A body has
+          // meaningful area on both axes, as in the standalone frame sampler.
+          return !overlap.isNull && overlap.width > 1.1 && overlap.height > 1.1
         }
       }
       if spills { neighborSpillSamples += 1 }

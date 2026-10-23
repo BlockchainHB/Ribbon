@@ -22,6 +22,7 @@ mod manager;
 mod menubar;
 mod overlay;
 mod pasteboard;
+mod performance;
 mod platform;
 mod reader;
 mod ribbon;

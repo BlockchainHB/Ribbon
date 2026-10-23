@@ -7,6 +7,42 @@ controls and build 14's motion improvements remain. The installed app is
 It is Developer ID signed and not notarized. Current hashes, receipts and
 limitations are in [verification.json](verification.json).
 
+## Resize-return motion — 22 October 2026
+
+[Motion review and evidence](resize-return-motion.md). Removed the fixed
+200-point return gate and restored exposed native size directly after the ordered
+reveal move. Learned app minimum sizes, seam guards and coalesced focus remain.
+The final signed app passed 14 resize-return checks, 13 keyboard/navigation checks
+and 14 pairing checks on the built-in display. Native Control–Option arrows,
+external activation, no sampled overlaps and exact restoration were verified.
+Code checks passed 502/419 engine, 46/39 library and 26 Swift tests.
+
+Installed engine SHA-256:
+`c646552ae49371f05f6e2315f994e656f91c3c29374c668849249ab1afa4bb18`.
+Only the laptop display was connected after relocation; fresh physical dual-display
+verification of this follow-up remains unperformed. Normal Ribbon was reopened
+paused. The performance results below belong to the preceding measured checkpoint.
+
+## Measured engine performance — 22 October 2026
+
+[Implementation and controlled results](engine-performance.md). The same signed
+binary passed four alternating 16-check native runs on both connected monitors.
+Optimized mode reduced median size writes 77.5%, frame queries 87.8%, active-frame
+work 56.7% and engine CPU 32.5%; input-latency bounds stayed roughly the same.
+The broader suite passed 18 single-display / 20 dual-display checks; pairing
+passed 14 checks. Light/dark overview captures were inspected. All automated
+window management remained restricted to disposable fixtures.
+
+`scripts/verify.sh` passed 501/418 engine, 46/39 library and 26 Swift tests, plus
+format, strict Clippy, generated configuration and signatures. Evidence:
+`build/perf-final-verify.log`, `build/qa/performance-comparison.json`,
+`build/qa/perf-desktop-verified/summary.json`, and
+`build/qa/perf-pairing-verified/report.json`.
+That measured checkpoint’s engine SHA-256 is
+`883411609ccf9b5b265fff13fc039504ae2000d088442127ce887d52a97150ea`.
+Native samples establish geometry correctness, not compositor FPS or busy
+third-party redraw cost. Normal Ribbon was reopened paused after installation.
+
 ## Pairing (build 16)
 
 [Behavior and usage](pairing.md). `scripts/verify.sh` passed: 46+483 default Rust,
@@ -359,3 +395,19 @@ replaced.
 Reproduce the isolated startup checks, with two displays and Ribbon quit:
 
     python3 scripts/qa-startup.py "$HOME/Applications/Ribbon.app" "$PWD/build/qa/fresh-startup-run"
+
+## Directional fill and dual-display motion — 2026-10-22
+
+See [navigation-motion.md](navigation-motion.md) for the seam/presentation fix,
+native focus scheduling, geometry echo suppression, final exit restoration,
+design review and timing limits. `scripts/verify.sh` passed: 490/407 engine tests,
+46/39 library tests, 26 Swift tests, formatting, strict Clippy and package checks.
+The installed signed engine is
+`b338c886569f347da02a5713bdd69bc11e88e413b2d996792d3056d5e7ae7c80`.
+Physical native navigation checks pass on both connected displays, including
+24 Control–Option arrow changes, external activation of eight parked tiles,
+visible neighbors after centering, seam containment in 60 Hz native-frame
+samples, and immediate-stop restoration. The full settings/menu/lifecycle suite
+passes nine checks each in `build/qa/navigation-startup-delivery/summary.json`.
+Personal applications remain outside the automated engine allowlist. Raw samples
+and screenshots are local ignored artifacts, not public repository assets.

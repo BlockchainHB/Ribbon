@@ -187,3 +187,63 @@ engine option; Swift owns no layout geometry.
   block moves, stack leader removal, insertion, ungroup geometry, rejected-width
   readback, fill interaction, geometry changes and simulated dual-display transfer.
   Real-desktop verification is recorded separately in docs/pairing.md.
+
+## Native edge presentation and directional motion
+
+- `ecs/layout/parking.rs`: constrain a partially visible native window to its
+  exposed horizontal slot on either edge. `EdgePresentation` is presentation
+  only; full `Bounds`, ratios and preferred widths remain owned by the strip.
+  Tiny slots stay parked. A refused AX shrink records a session-local minimum
+  width and parks before repositioning, preserving adjacent-display protection.
+- `ecs/systems.rs`: commit the derived native size without changing logical
+  packing; restore full native size on reveal. Ignore own move/resize echoes
+  while the owning strip animates, and ignore clipped/parked presentation sizes.
+  Preserve manual geometry reads at rest and parallel native size commits.
+- `ecs/focus.rs`: coalesce native focus requests and issue them after geometry
+  commits, before mouse-follow behavior. Start rejection timing at the actual
+  native request. External activation still follows the existing focus/reveal
+  route; clipping does not become a new layout or focus authority.
+- Regression tests exercise both edges, preserved logical widths, minimum-size
+  fallback/recovery and geometry echo handling. Physical dual-monitor keyboard,
+  frame sampling, focus and recovery evidence is in docs/navigation-motion.md.
+- `ecs.rs`: restore native original frames in `Last`, after every geometry and
+  focus commit, so an immediate exit cannot be overwritten by its final frame.
+  A regression covers exit while strip movement is still active.
+
+## Measured native geometry performance
+
+- `manager/frame.rs` batches position/size AX reads, validates returned geometry,
+  and retains a per-window compatibility fallback. Unsupported results are
+  cached; transient failures are retried. Native resize validation is retained.
+- `ecs/motion.rs` samples intermediate geometry at the owning display interval,
+  resolving canonical strip membership. Targets/endpoints bypass sampling;
+  continuing transitions consume actual elapsed time after slow native calls.
+  `manager/display.rs` caches reported refresh timing with existing topology.
+  No new event-loop sleep, compositor API, command queue or Swift layout state.
+- `ecs/systems.rs` avoids duplicate parking readback when verification is already
+  scheduled. Keeps minimum-size fallback, ordered positions and parallel sizes.
+- `performance.rs` adds opt-in bounded aggregate histograms, with no title/content
+  collection or per-frame disk writes. Disabled profiling registers no systems.
+  Reproducible isolated hardware measurements and limits are documented in
+  `docs/engine-performance.md`; upstream source/dependencies remain pinned.
+- A one-commit `NativeReveal` fence parks outgoing bodies first, moves visible
+  leaders next, then reveals parked neighbors. Artificial parking coordinates
+  must not put an incoming left tile before the visible tile moving aside.
+  An ordered native-write regression covers the one-frame overlap found during
+  interrupted dual-display resizing.
+- Mid-sample retargeting starts at the last emitted native geometry while
+  carrying bounded velocity. A 60 Hz reversal regression prevents jumping to
+  an uncommitted curve point before moving in the new direction.
+- `ecs/focus.rs` retains coalesced native focus while a tile is compact-parked,
+  preventing activation of the parking monitor's last key window. Geometry still
+  advances immediately; rejection checks exclude pending requests and the timer
+  starts on actual focus dispatch. A regression covers parked/revealed dispatch.
+- Profiling-only `RIBBON_PERF_BASELINE=1` selects uncapped output/sequential
+  frame queries for controlled A/B runs in one binary, retaining all correctness
+  guards. It has no effect unless the profile output is explicitly enabled.
+
+- Returning edge presentations no longer wait for a fixed 200-point slot. The
+  first native attempt uses a positive content width including padding; accepted
+  minimum-size readback still parks rejected bodies before any seam crossing.
+  Returning tiles restore exposed native size directly after their ordered move,
+  before verification or unrelated growth work can expose the parking size.
