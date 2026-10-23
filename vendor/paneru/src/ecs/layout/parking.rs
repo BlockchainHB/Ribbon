@@ -36,7 +36,7 @@ pub(super) fn visible_edge_frame(
     let mut visible = frame;
     visible.min.x = frame.min.x.max(viewport.min.x);
     visible.max.x = frame.max.x.min(viewport.max.x);
-    (visible.width() >= minimum_width.max(200)).then_some(visible)
+    (visible.width() >= minimum_width.max(1)).then_some(visible)
 }
 
 pub(super) fn update_legacy_parking_state(
@@ -352,6 +352,20 @@ pub(super) fn legacy_parking(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn returning_edge_uses_accepted_minimum_instead_of_a_fixed_reveal_threshold() {
+        let viewport = IRect::new(0, 30, 2560, 1440);
+        for width in [13, 40, 100, 199, 260] {
+            let logical = IRect::new(2560 - width, 30, 3200, 1440);
+            let exposed = visible_edge_frame(logical, viewport, 13).unwrap();
+            assert_eq!(exposed.width(), width);
+            assert_eq!(exposed.height(), 1410);
+            if width < 260 {
+                assert!(visible_edge_frame(logical, viewport, 260).is_none());
+            }
+        }
+    }
 
     #[test]
     fn partial_tile_parks_before_crossing_an_interior_monitor_seam() {

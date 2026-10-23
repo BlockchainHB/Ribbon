@@ -241,3 +241,9 @@ engine option; Swift owns no layout geometry.
 - Profiling-only `RIBBON_PERF_BASELINE=1` selects uncapped output/sequential
   frame queries for controlled A/B runs in one binary, retaining all correctness
   guards. It has no effect unless the profile output is explicitly enabled.
+
+- Returning edge presentations no longer wait for a fixed 200-point slot. The
+  first native attempt uses a positive content width including padding; accepted
+  minimum-size readback still parks rejected bodies before any seam crossing.
+  Returning tiles restore exposed native size directly after their ordered move,
+  before verification or unrelated growth work can expose the parking size.

@@ -1960,7 +1960,7 @@ fn position_layout_windows(
                     focused.contains(entity),
                     presentation.hidden.contains(&entity),
                 ),
-                minimum_width.map_or(200, |m| m.0),
+                minimum_width.map_or(padding.x * 2 + 1, |m| m.0),
             );
             frame = presentation.frame;
             let edge = presentation.edge;

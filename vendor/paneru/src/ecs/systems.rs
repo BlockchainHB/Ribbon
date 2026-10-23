@@ -105,6 +105,8 @@ type NativePositionWindows<'w, 's> = Populated<
         Option<&'static CompactParked>,
         Option<&'static VerifyWindowPosition>,
         Has<NativeReveal>,
+        &'static Bounds,
+        Option<&'static EdgePresentation>,
     ),
     Changed<Position>,
 >;
@@ -1163,7 +1165,7 @@ pub(super) fn commit_window_position(
     // cannot temporarily cover a neighbor whose old frame has not moved yet.
     let mut moves = moved_windows
         .iter_mut()
-        .map(|(entity, window, position, parked, _, revealing)| {
+        .map(|(entity, window, position, parked, _, revealing, _, _)| {
             let delta = position.0 - window.frame().min;
             let (step, coordinate) = if delta.x != 0 {
                 (delta.x, position.0.x)
@@ -1190,7 +1192,7 @@ pub(super) fn commit_window_position(
         .collect::<Vec<_>>();
     moves.sort_unstable_by_key(|(key, _)| *key);
     for (_, entity) in moves {
-        if let Ok((_, mut window, position, parked, verification, revealing)) =
+        if let Ok((_, mut window, position, parked, verification, revealing, bounds, edge)) =
             moved_windows.get_mut(entity)
         {
             objc2::rc::autoreleasepool(|_| {
@@ -1205,6 +1207,11 @@ pub(super) fn commit_window_position(
                 }
                 window.reposition(position.0);
                 if revealing {
+                    // The parking display can be shorter than the owner. Restore
+                    // the exposed size immediately after the move, before other
+                    // position readbacks or the parallel growth phase can leave
+                    // a shortened or oversized parked frame visible for a tick.
+                    window.resize(edge.map_or(bounds.0, |edge| edge.frame.size()));
                     commands.entity(entity).try_remove::<NativeReveal>();
                 }
                 // New parking is read back by verify_window_position immediately
@@ -1828,12 +1835,20 @@ mod geometry_echo_tests {
         ] {
             let mut api = MockWindowApi::new();
             api.expect_frame().return_const(frame);
-            let writes = writes.clone();
+            let moves = writes.clone();
             api.expect_reposition()
                 .times(1)
-                .returning(move |_| writes.lock().unwrap().push(id));
+                .returning(move |_| moves.lock().unwrap().push(id));
+            let size = frame.size().with_y(1410);
+            if revealing {
+                let sizes = writes.clone();
+                api.expect_resize()
+                    .with(mockall::predicate::eq(size))
+                    .times(1)
+                    .returning(move |_| sizes.lock().unwrap().push(2));
+            }
             let entity = world
-                .spawn((Window::new(Box::new(api)), Position(target)))
+                .spawn((Window::new(Box::new(api)), Position(target), Bounds(size)))
                 .id();
             if revealing {
                 world.entity_mut(entity).insert(NativeReveal);
@@ -1842,7 +1857,7 @@ mod geometry_echo_tests {
         }
         let commit = world.register_system(commit_window_position);
         world.run_system(commit).unwrap();
-        assert_eq!(*writes.lock().unwrap(), vec![0, 1]);
+        assert_eq!(*writes.lock().unwrap(), vec![0, 1, 2]);
         assert!(world.get::<NativeReveal>(returning.unwrap()).is_none());
     }
 

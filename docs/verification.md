@@ -7,6 +7,22 @@ controls and build 14's motion improvements remain. The installed app is
 It is Developer ID signed and not notarized. Current hashes, receipts and
 limitations are in [verification.json](verification.json).
 
+## Resize-return motion — 22 October 2026
+
+[Motion review and evidence](resize-return-motion.md). Removed the fixed
+200-point return gate and restored exposed native size directly after the ordered
+reveal move. Learned app minimum sizes, seam guards and coalesced focus remain.
+The final signed app passed 14 resize-return checks, 13 keyboard/navigation checks
+and 14 pairing checks on the built-in display. Native Control–Option arrows,
+external activation, no sampled overlaps and exact restoration were verified.
+Code checks passed 502/419 engine, 46/39 library and 26 Swift tests.
+
+Installed engine SHA-256:
+`c646552ae49371f05f6e2315f994e656f91c3c29374c668849249ab1afa4bb18`.
+Only the laptop display was connected after relocation; fresh physical dual-display
+verification of this follow-up remains unperformed. Normal Ribbon was reopened
+paused. The performance results below belong to the preceding measured checkpoint.
+
 ## Measured engine performance — 22 October 2026
 
 [Implementation and controlled results](engine-performance.md). The same signed
@@ -22,7 +38,7 @@ format, strict Clippy, generated configuration and signatures. Evidence:
 `build/perf-final-verify.log`, `build/qa/performance-comparison.json`,
 `build/qa/perf-desktop-verified/summary.json`, and
 `build/qa/perf-pairing-verified/report.json`.
-The installed engine SHA-256 is
+That measured checkpoint’s engine SHA-256 is
 `883411609ccf9b5b265fff13fc039504ae2000d088442127ce887d52a97150ea`.
 Native samples establish geometry correctness, not compositor FPS or busy
 third-party redraw cost. Normal Ribbon was reopened paused after installation.

@@ -2,6 +2,7 @@
 """Opt-in engine profiling with disposable windows and native keyboard input.
 
 Usage: RIBBON_QA_KEYBOARD=1 python3 scripts/qa-performance.py OUTPUT SIGNED_APP
+Add --resize-return for focused resize/reveal coverage.
 Pause Ribbon first. A fresh output directory is required. No personal windows are managed.
 """
 
@@ -13,8 +14,11 @@ import sys
 import time
 from pathlib import Path
 
+resize_only = sys.argv[-1] == "--resize-return"
+if resize_only:
+    sys.argv.pop()
 if len(sys.argv) not in (2, 3):
-    raise SystemExit("Usage: qa-performance.py FRESH_OUTPUT [SIGNED_APP]")
+    raise SystemExit("Usage: qa-performance.py FRESH_OUTPUT [SIGNED_APP] [--resize-return]")
 root = Path(__file__).resolve().parents[1]
 out = Path(sys.argv[1]).expanduser().resolve()
 out.mkdir(parents=True, exist_ok=False)
@@ -112,6 +116,7 @@ receipts = []
 checks = []
 (out / "engine-sha256.txt").write_text(hashlib.sha256(engine.read_bytes()).hexdigest())
 try:
+    transitions = []
     with (out / "engine.log").open("w") as log:
         proc = subprocess.Popen(
             [str(engine), "launch"], env=env, stdout=log, stderr=log
@@ -140,6 +145,9 @@ try:
         # Build the same overflowing full-width workload through Ribbon instead.
         for target in original:
             run(helper, "focus", target["id"])
+            # LaunchServices activation keeps the fixture foreground when the
+            # user was interacting with another app as this helper launched.
+            run("open", "-a", app / "Contents/Resources/Ribbon Demo.app")
             owner = next(d for d in displays if d["id"] == target["screenID"])
             eventually(
                 lambda: any(
@@ -161,53 +169,67 @@ try:
             time.sleep(0.4)
             run(helper, "motion", "begin")
             time.sleep(0.1)
-            for lap in range(2):
-                for direction, code in [("right", 124)] * 3 + [("left", 123)] * 3:
-                    before = next((w["id"] for w in load() if w["focused"]))
-                    stamp = time.monotonic()
-                    if os.environ.get("RIBBON_QA_KEYBOARD") == "1":
-                        stamp = float(
-                            run(
-                                "swift",
-                                root / "scripts/qa-performance-input.swift",
-                                "key",
-                                code,
+            if resize_only:
+                for side in ["first", "last"]:
+                    cmd("focus", side)
+                    time.sleep(0.4)
+                    for lap in range(2):
+                        for action in ["shrink", "shrink", "shrink", "center", "fullwidth"]:
+                            transitions.append(
+                                {"display": display["id"], "side": side,
+                                 "action": action, "time": time.monotonic()}
                             )
-                        )
-                    else:
-                        cmd("focus", "east" if direction == "right" else "west")
-                    try:
-                        eventually(
-                            lambda: any(
-                                (w["focused"] and w["id"] != before for w in load())
+                            cmd(action)
+                            time.sleep(0.55)
+                run(helper, "motion", "end")
+            else:
+                for lap in range(2):
+                    for direction, code in [("right", 124)] * 3 + [("left", 123)] * 3:
+                        before = next((w["id"] for w in load() if w["focused"]))
+                        stamp = time.monotonic()
+                        if os.environ.get("RIBBON_QA_KEYBOARD") == "1":
+                            stamp = float(
+                                run(
+                                    "swift",
+                                    root / "scripts/qa-performance-input.swift",
+                                    "key",
+                                    code,
+                                )
                             )
-                        )
-                    except Exception:
-                        (out / "failure.json").write_text(
-                            json.dumps(
-                                {
-                                    "display": display,
-                                    "direction": direction,
-                                    "before": before,
-                                    "events": events,
-                                    "frames": load(),
-                                    "state": json.loads(
-                                        run(engine, "query", "state", "--json")
-                                    ),
-                                }
+                        else:
+                            cmd("focus", "east" if direction == "right" else "west")
+                        try:
+                            eventually(
+                                lambda: any(
+                                    (w["focused"] and w["id"] != before for w in load())
+                                )
                             )
+                        except Exception:
+                            (out / "failure.json").write_text(
+                                json.dumps(
+                                    {
+                                        "display": display,
+                                        "direction": direction,
+                                        "before": before,
+                                        "events": events,
+                                        "frames": load(),
+                                        "state": json.loads(
+                                            run(engine, "query", "state", "--json")
+                                        ),
+                                    }
+                                )
+                            )
+                            run(helper, "motion", "end")
+                            raise
+                        events.append(
+                            {
+                                "display": display["id"],
+                                "direction": direction,
+                                "time": stamp,
+                            }
                         )
-                        run(helper, "motion", "end")
-                        raise
-                    events.append(
-                        {
-                            "display": display["id"],
-                            "direction": direction,
-                            "time": stamp,
-                        }
-                    )
-                    time.sleep(0.6)
-            run(helper, "motion", "end")
+                        time.sleep(0.6)
+                run(helper, "motion", "end")
             eventually(lambda: (out / "motion-frames.json").exists())
             frames = json.loads((out / "motion-frames.json").read_text())
             (out / f"motion-{int(display['id'])}.json").write_text(json.dumps(frames))
@@ -265,6 +287,9 @@ try:
             )
         for target in original:
             run(helper, "focus", target["id"])
+            # LaunchServices activation keeps the fixture foreground when the
+            # user was interacting with another app as this helper launched.
+            run("open", "-a", app / "Contents/Resources/Ribbon Demo.app")
             owner = next((d for d in displays if d["id"] == target["screenID"]))
             eventually(
                 lambda: any(
@@ -363,12 +388,73 @@ try:
                 }
             )
 
-        assert len(receipts) == 24 and all(
-            (r["firstMovementMS"] is not None for r in receipts)
-        )
-        checks.append(
-            {"check": "24 left/right changes produce native movement", "passed": True}
-        )
+        if resize_only:
+            (out / "resize-transitions.json").write_text(json.dumps(transitions, indent=2))
+            reveals = []
+            for d in displays:
+                previous = {}
+                own_ids = {o["id"] for o in original if o["screenID"] == d["id"]}
+                samples = json.loads((out / f"motion-{int(d['id'])}.json").read_text())
+                for sample in samples:
+                    for w in sample["frames"]:
+                        if w["id"] not in own_ids:
+                            continue
+                        exposed = (
+                            w["x"] < d["x"] + d["width"] - 2
+                            and w["x"] + w["width"] > d["x"] + 2
+                            and w["y"] < d["y"] + 60
+                        )
+                        if exposed and not previous.get(w["id"], True):
+                            # Exclude focus changes between the resize sequences.
+                            recent = [
+                                t for t in transitions
+                                if t["display"] == d["id"]
+                                and 0 <= sample["time"] - t["time"] <= 0.45
+                            ]
+                            if recent:
+                                transition = recent[-1]
+                                reveals.append({
+                                    "display": d["id"], "time": sample["time"],
+                                    "side": transition["side"], "action": transition["action"],
+                                    "width": w["width"], "height": w["height"],
+                                })
+                                assert abs(w["height"] - d["height"]) <= 3, (
+                                    "Returning tile exposed the parking monitor's short height"
+                                )
+                        previous[w["id"]] = exposed
+            (out / "resize-reveals.json").write_text(json.dumps(reveals, indent=2))
+            for d in displays:
+                for side in ["first", "last"]:
+                    own_reveals = [
+                        r for r in reveals
+                        if r["display"] == d["id"] and r["side"] == side
+                    ]
+                    assert len(own_reveals) >= 2, (
+                        "Resize must reveal both edge neighbors repeatedly"
+                    )
+                    checks.append({
+                        "check": "repeated resize-triggered reveals restore full height",
+                        "display": d["id"], "side": side, "passed": True,
+                    })
+        else:
+            expected_keys = 12 * len(displays)
+            assert len(receipts) == expected_keys and all(
+                (r["firstMovementMS"] is not None for r in receipts)
+            )
+            checks.append({
+                "check": f"{expected_keys} left/right changes produce native movement",
+                "passed": True,
+            })
+except Exception as error:
+    diagnosis = {"error": str(error), "frames": load()}
+    if proc and proc.poll() is None:
+        try:
+            diagnosis["state"] = json.loads(run(engine, "query", "state", "--json"))
+        except Exception as query_error:
+            diagnosis["queryError"] = str(query_error)
+    (out / "failure.json").write_text(json.dumps(diagnosis, indent=2))
+    raise
+
 finally:
     if proc and proc.poll() is None:
         run(engine, "send-cmd", "quit")
