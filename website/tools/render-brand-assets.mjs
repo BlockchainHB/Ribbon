@@ -20,7 +20,9 @@ const site = resolve('dist');
 const publicDir = resolve('public');
 const brandIcon = resolve('../branding/IconComposer/Ribbon.icon/Assets/Cobalt-Original.png');
 const fps = 30;
-const posterTime = 2100; // ms into the hero loop: just after the first swipe, as in Paper.
+// Loop start: Codex, IDE and Safari side by side. Discord shows og:image as the frame before
+// playback, so the poster matches the video's first frame.
+const posterTime = 0;
 
 const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json' };
 const server = createServer((request, response) => {
