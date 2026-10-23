@@ -11,6 +11,6 @@ Ribbon's site is a product presentation with a small amount of interaction. Page
 | [Qwik](https://qwik.dev/docs/concepts/resumable/) | Serializes server-rendered state and resumes interaction without conventional hydration. | Useful for more interactive applications; not an advantage over plain HTML for this page's static content. |
 | [Next.js](https://nextjs.org/docs/app/guides/static-exports) | Supports static exports and build-time Server Components. | Capable, but this site does not need its React application model. |
 
-This is a fit decision based on architecture, not a claim that a four-framework benchmark was run. Measure this site's actual production output and browser behavior. No client framework, animation library, external font, analytics, or third-party widget is needed.
+This is a fit decision based on architecture, not a claim that a four-framework benchmark was run. Measure this site's actual production output and browser behavior. No client framework, animation library, external font, or third-party widget is needed. DataFast analytics was added later, on 22 October 2026, as a single deferred script tag (see README).
 
 Versions are pinned in package.json and the dependency tree is locked. Sources were checked live; raw research is in the gitignored `.firecrawl/framework-choice/` directory at the repository root.
