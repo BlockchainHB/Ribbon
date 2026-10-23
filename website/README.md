@@ -28,7 +28,7 @@ Static output is in `dist/`. No application server or client framework is requir
 
 ## Analytics
 
-The shared layout (`src/layouts/Site.astro`) loads the [DataFast](https://datafa.st/docs/astro) tracking script on every page with `is:inline defer`. The website ID and domain are public identifiers; do not change them. DataFast ignores localhost and automated browsers, so development and headless QA send no events. The default script sets first-party `datafast_visitor_id` / `datafast_session_id` cookies. The site has no Content-Security-Policy; if one is added, allow `https://datafa.st` in `script-src` and `connect-src`.
+The shared layout (`src/layouts/Site.astro`) loads the [DataFast](https://datafa.st/docs/astro) tracking script on every page with `is:inline defer`. The website ID and domain are public identifiers; do not change them. DataFast ignores localhost and automated browsers, so development and headless QA send no events. The default script sets first-party `datafast_visitor_id` / `datafast_session_id` cookies. Every Download button records a `download_click` goal with `location` (`header`, `hero`, `download_section`) and `version` (the release tag), set in `src/components/DownloadLink.astro`. The site has no Content-Security-Policy; if one is added, allow `https://datafa.st` in `script-src` and `connect-src`.
 
 ## Release destinations
 

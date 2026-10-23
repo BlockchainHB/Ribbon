@@ -82,3 +82,4 @@ Safari, physical phones, real background-tab visibility transitions, and frame-r
 - Added the DataFast tracking script to the shared layout `<head>` as `is:inline defer` with the supplied website ID and `data-domain="ribbonwm.com"`. No CSP exists in the site or Vercel project.
 - `npm run check`: 0 errors, warnings or hints. `npm run build`: passed. Built `index.html` and `404.html` each contain the tag exactly once, emitted unbundled with `defer`.
 - The tracker ignores localhost and automated browsers, so local and headless QA cannot produce dashboard events. Live event delivery must be confirmed from a normal browser visit and the DataFast dashboard.
+- Download tracking: all three Download buttons carry `data-fast-goal="download_click"` with `location` and `version` parameters (verified in built HTML). Goal delivery, like pageviews, can only be confirmed from a normal browser and the DataFast dashboard.
