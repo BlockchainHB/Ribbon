@@ -91,3 +91,9 @@ Safari, physical phones, real background-tab visibility transitions, and frame-r
 - `npm run check`: 0 errors, warnings or hints. Build with `PUBLIC_SITE_URL=https://ribbonwm.com` emits absolute `og:image`, `og:video` (with type and size), `twitter:card=summary_large_image`, and the new icon links.
 - Not verified: how each app (Discord, iMessage, Slack, X, LinkedIn) renders the preview or whether it plays `og:video`. Check by sharing the live URL.
 - OG video revision: `og:type=video.other` (Discord's documented requirement for its inline player), brandless `og:title` with `og:site_name`, poster = video frame 0 (RMSE 1% versus the decoded first frame). The MP4 re-rendered byte-identical, confirming deterministic output. Platform support was researched from official Discord, Apple and Facebook docs; no public, verified cross-platform matrix exists (the LiveOG project marks every platform unverified), so real shares remain the test.
+
+## Hero link and everyday-work motion — 22 October 2026
+
+- Removed the hero's “See how it works” scroll link and its unused styles; the hero keeps one download action.
+- “Your everyday work, too.” now stacks heading, subheading and illustration. The approved display artwork is inline SVG; each screen's strip scrolls independently and reveals a Mail window. The standalone `displays.svg` asset was removed.
+- `npm run check`: 0 errors, warnings or hints. `npm run build`: passed. Headless Chrome at 1440×900 and 390×844: no console errors, no horizontal overflow; the displays scene runs when centered and its loop frames were reviewed.

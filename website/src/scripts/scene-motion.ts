@@ -323,7 +323,28 @@ function design(root: HTMLElement): Storyboard {
   };
 }
 
-const builders: Record<string, Builder> = { workspace, pair, overview, stack, design };
+// Each display scrolls its own strip, at different times. SVG translations are in artwork units.
+function displays(root: HTMLElement): Storyboard {
+  const duration = 10000;
+  const scroll = (distance: number, start: number): Stop[] => [
+    { at: 0, values: { transform: translate(0) } },
+    { at: start, values: {} },
+    { at: start + 800, values: { transform: translate(-distance) } },
+    { at: start + 4000, values: {} },
+    { at: start + 4800, values: { transform: translate(0) } },
+    { at: duration, values: {} },
+  ];
+  return {
+    duration,
+    still: 0,
+    tracks: [
+      ...timeline(root.querySelector('[data-strip="external"]'), duration, scroll(177, 1400)),
+      ...timeline(root.querySelector('[data-strip="laptop"]'), duration, scroll(148, 3200)),
+    ],
+  };
+}
+
+const builders: Record<string, Builder> = { workspace, pair, overview, stack, design, displays };
 
 class Scene {
   visible = 0;
