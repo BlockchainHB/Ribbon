@@ -24,7 +24,11 @@ npm run build
 npm run preview -- --port 4321
 ```
 
-Static output is in `dist/`. No application server, client framework, or third-party service is required.
+Static output is in `dist/`. No application server or client framework is required.
+
+## Analytics
+
+The shared layout (`src/layouts/Site.astro`) loads the [DataFast](https://datafa.st/docs/astro) tracking script on every page with `is:inline defer`. The website ID and domain are public identifiers; do not change them. DataFast ignores localhost and automated browsers, so development and headless QA send no events. The default script sets first-party `datafast_visitor_id` / `datafast_session_id` cookies. The site has no Content-Security-Policy; if one is added, allow `https://datafa.st` in `script-src` and `connect-src`.
 
 ## Release destinations
 
