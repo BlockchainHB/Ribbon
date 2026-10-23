@@ -44,8 +44,11 @@ motion observations. The integrated signed diagnostic engine passed 21 native
 two-monitor checks, and live WebKit fixtures passed 50 motion observations per
 direction without viewport resize. Source now defaults to projection when the
 macOS 26+ runtime supports it; older/unsupported systems retain compatibility.
-The normal signed build/exact-build confirmation are in progress. Read the
-investigation for receipt paths, failed attempts and remaining app/compositor QA.
+The normal signed release-profile build at `c34fb9ac5c29ead3e4c8e1eef596d11e386b8f6c`
+also passed all 21 checks with default settings, was installed in
+`~/Applications/Ribbon.app`, and reopened paused (no engine running at delivery).
+No public release or merge was performed. Read the investigation for exact hashes,
+receipt paths, failed attempts and remaining real-app/compositor QA.
 
 - Canonical checkout: `/Users/neat/dev/Ribbon`, outside iCloud sync. Historical
   Documents/Codex paths may be symlinks or evidence references. Do not move back.

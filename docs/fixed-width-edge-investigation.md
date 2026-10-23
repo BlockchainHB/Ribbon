@@ -185,10 +185,19 @@ cannot silently pass against a fallback. Native fullscreen strips retain native
 presentation and retire existing compositor handles; mocked regressions cover
 fullscreen cleanup and native Space suspension/resumption.
 
-The normal signed build and exact-build native confirmation are being prepared.
+The normal Developer ID signed release-profile build from
+`c34fb9ac5c29ead3e4c8e1eef596d11e386b8f6c` passed the same **21 native checks**
+with default settings (no projection override), in
+`build/qa/fixed-content-release-20261023-a/report.json`. Its engine SHA-256 is
+`2aca30607c21133066dc1a5f23d5dd7c5ccaacef07800089c91d47e997d0a58d`.
+The installed `~/Applications/Ribbon.app` matches that source/hash, passes deep
+strict signature verification, and was reopened paused with no engine running.
+The pre-existing app quit before installation; unrelated untracked files remain.
+
 Direct Codex/Claude/Dia/T3 interaction, physical fullscreen/Space transitions,
 mixed-scale/portrait topology and 120 Hz compositor delivery remain unverified.
-No public release or merge is authorized by this local fix.
+No public release or merge was performed. [PR #8](https://github.com/BlockchainHB/Ribbon/pull/8)
+contains the source change; raw captures, recovery journals and signing logs stay local.
 
 `scripts/verify.sh` passed after the source fix: Rust formatting and
 Clippy, 510/427 engine tests and 46/39 library tests in the two overlapping
