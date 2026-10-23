@@ -83,3 +83,11 @@ Safari, physical phones, real background-tab visibility transitions, and frame-r
 - `npm run check`: 0 errors, warnings or hints. `npm run build`: passed. Built `index.html` and `404.html` each contain the tag exactly once, emitted unbundled with `defer`.
 - The tracker ignores localhost and automated browsers, so local and headless QA cannot produce dashboard events. Live event delivery must be confirmed from a normal browser visit and the DataFast dashboard.
 - Download tracking: all three Download buttons carry `data-fast-goal="download_click"` with `location` and `version` parameters (verified in built HTML). Goal delivery, like pageviews, can only be confirmed from a normal browser and the DataFast dashboard.
+
+## Favicon and social preview — 22 October 2026
+
+- Designed in Paper (Ribbon → 03 · Social & favicon). Favicon: traced Fold mark SVG with dark-mode fill, plus ICO 16/32/48 and a 180 px Apple touch icon. Checked at 16 and 32 px on light and dark tab bars.
+- Social: `og.mp4` 1200×630 H.264 yuv420p, 30 fps, 11 s seamless loop (first and last frames match), about 400 KB, faststart; `og.jpg` poster about 73 KB. Frames sampled across the loop; the swipe, pair and stack beats are all inside the frame.
+- `npm run check`: 0 errors, warnings or hints. Build with `PUBLIC_SITE_URL=https://ribbonwm.com` emits absolute `og:image`, `og:video` (with type and size), `twitter:card=summary_large_image`, and the new icon links.
+- Not verified: how each app (Discord, iMessage, Slack, X, LinkedIn) renders the preview or whether it plays `og:video`. Check by sharing the live URL.
+- OG video revision: `og:type=video.other` (Discord's documented requirement for its inline player), brandless `og:title` with `og:site_name`, poster = video frame 0 (RMSE 1% versus the decoded first frame). The MP4 re-rendered byte-identical, confirming deterministic output. Platform support was researched from official Discord, Apple and Facebook docs; no public, verified cross-platform matrix exists (the LiveOG project marks every platform unverified), so real shares remain the test.

@@ -26,6 +26,22 @@ npm run preview -- --port 4321
 
 Static output is in `dist/`. No application server or client framework is required.
 
+## Favicon and social preview
+
+- `public/favicon.svg`: the Fold mark traced from `branding/explorations/fold/mark.png` (potrace), cobalt with a lighter dark-mode fill. `favicon.ico` (16/32/48) and `apple-touch-icon.png` (from the approved Icon Composer artwork) are rendered from it.
+- `public/social/og.mp4` and `og.jpg`: the 1200×630 link preview. Design source: Paper file "Ribbon", page "03 · Social & favicon". The video is the real hero loop (swipe, pair, stack), stepped frame by frame at 30 fps; the JPG is its poster and the universal `og:image`. `og:video` is also declared for apps that play it.
+- Social tags need absolute URLs, so they are emitted only when `PUBLIC_SITE_URL` is set.
+- `og:type` is `video.other` with a direct MP4 in `og:video`: Discord requires that for its inline video player, using `og:image` as the frame before playback, so the poster is the loop's first frame. Apple Messages downloads and autoplays a direct MP4 (muted, looping). `twitter:card` stays `summary_large_image`, so X, Slack and LinkedIn show the poster. The brand lives in `og:site_name`, not `og:title` (Apple guidance). Sources: [Discord link previews](https://docs.discord.com/developers/link-previews/overview), [Apple TN3156](https://developer.apple.com/documentation/technotes/tn3156-create-rich-previews-for-messages), [Facebook sharing](https://developers.facebook.com/docs/sharing/webmasters/).
+
+Regenerate after changing the hero or brand (run from `website/`, after `npm run build`):
+
+```sh
+npm install --no-save --prefix /tmp/ribbon-render playwright-core@1
+PLAYWRIGHT_CORE=/tmp/ribbon-render/node_modules/playwright-core/index.mjs node tools/render-brand-assets.mjs
+```
+
+It needs Google Chrome, ffmpeg and ImageMagick.
+
 ## Analytics
 
 The shared layout (`src/layouts/Site.astro`) loads the [DataFast](https://datafa.st/docs/astro) tracking script on every page with `is:inline defer`. The website ID and domain are public identifiers; do not change them. DataFast ignores localhost and automated browsers, so development and headless QA send no events. The default script sets first-party `datafast_visitor_id` / `datafast_session_id` cookies. Every Download button records a `download_click` goal with `location` (`header`, `hero`, `download_section`) and `version` (the release tag), set in `src/components/DownloadLink.astro`. The site has no Content-Security-Policy; if one is added, allow `https://datafa.st` in `script-src` and `connect-src`.
