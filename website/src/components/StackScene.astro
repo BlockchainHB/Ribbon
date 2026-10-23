@@ -1,17 +1,18 @@
 ---
-import AgentWindow from './AgentWindow.astro';
-import WindowChrome from './WindowChrome.astro';
+import CodexWindow from './apps/CodexWindow.astro';
+import SafariWindow from './apps/SafariWindow.astro';
+import TerminalWindow from './apps/TerminalWindow.astro';
+import SceneToggle from './SceneToggle.astro';
 ---
-  <div class="workspace-scene stack-scene" aria-hidden="true">
-    <div class="scene-viewport stack-workspace" data-viewport>
-      <AgentWindow />
-      <div class="example-window stack-browser" data-browser>
-        <WindowChrome title="Browser" />
-        <div class="stack-browser-content"><span class="stack-site-name">Ribbon</span><p>Your agents,<br />right beside<br />your work.</p></div>
-      </div>
-      <div class="example-window stack-terminal" data-terminal>
-        <WindowChrome title="Terminal" />
-        <pre class="stack-terminal-content"><span>~/workspace</span>{'\n'}<span class="terminal-prompt">❯</span> npm run dev{'\n\n'}<span class="terminal-ready">Ready on localhost</span></pre>
+<div class="motion-scene" data-motion="stack">
+  <div class="workspace-scene strip-scene stack-scene scene-blue" aria-hidden="true">
+    <div class="scene-viewport" data-viewport>
+      <div class="strip-track">
+        <div class="strip-slot" data-slot="codex"><CodexWindow /></div>
+        <div class="strip-slot" data-slot="browser"><SafariWindow /></div>
+        <div class="strip-slot" data-slot="terminal"><TerminalWindow /></div>
       </div>
     </div>
   </div>
+  <SceneToggle label="stacking demonstration" />
+</div>

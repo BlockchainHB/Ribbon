@@ -1,0 +1,8 @@
+---
+// Pause control for a looping illustration (WCAG 2.2.2). Hidden until motion is available.
+interface Props { label: string; class?: string; }
+const { label, class: className } = Astro.props;
+---
+<button class:list={['scene-toggle', className]} type="button" data-scene-toggle data-label={label} aria-label={`Pause ${label}`} hidden>
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g data-icon="pause"><path d="M9 6v12M15 6v12" /></g><g data-icon="play"><path d="m9 6 9 6-9 6Z" /></g></svg>
+</button>

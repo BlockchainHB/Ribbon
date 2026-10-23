@@ -1,0 +1,17 @@
+---
+import AppWindow from './AppWindow.astro';
+interface Props { variant?: 'design' | 'review'; }
+const { variant = 'design' } = Astro.props;
+const design = variant === 'design';
+---
+<AppWindow app="claude" title={design ? 'Homepage direction' : 'Review the changes'} icon="claude">
+  <div class="agent-thread">
+    <p class="chat-bubble">{design ? 'Make the homepage feel lighter.' : 'Review the hero changes.'}</p>
+    <div class="claude-reply">
+      <svg class="claude-spark" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M2 12h20M4.9 4.9l14.2 14.2M19.1 4.9 4.9 19.1" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" /></svg>
+      <p class="agent-reply">{design ? 'Let’s simplify the layout and give the headline more room.' : 'The layout reads clearly. Tighten the gap above Download.'}</p>
+    </div>
+    {design && <p class="tool-chip"><span class="paper-mark"></span><span>Updated Homepage</span><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></p>}
+  </div>
+  <div class="composer"><span>Reply to Claude…</span><span class="send-button"><svg width="10" height="10" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg></span></div>
+</AppWindow>

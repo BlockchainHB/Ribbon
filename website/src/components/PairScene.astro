@@ -1,0 +1,19 @@
+---
+import CodexWindow from './apps/CodexWindow.astro';
+import IdeWindow from './apps/IdeWindow.astro';
+import SafariWindow from './apps/SafariWindow.astro';
+import SceneToggle from './SceneToggle.astro';
+---
+<div class="motion-scene" data-motion="pair">
+  <div class="workspace-scene strip-scene pair-scene scene-blue" aria-hidden="true">
+    <div class="scene-viewport" data-viewport>
+      <div class="strip-track">
+        <div class="strip-slot" data-slot="codex"><CodexWindow /></div>
+        <div class="strip-slot" data-slot="ide"><IdeWindow /></div>
+        <div class="strip-slot" data-slot="safari"><SafariWindow /></div>
+        <div class="pair-outline" data-outline></div>
+      </div>
+    </div>
+  </div>
+  <SceneToggle label="pairing demonstration" />
+</div>

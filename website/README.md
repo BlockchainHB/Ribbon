@@ -41,6 +41,6 @@ Download, Source, and Release notes default to the public GitHub repository and 
 
 ## Structure
 
-`src/pages/index.astro` owns section order; `src/components/` owns the presentation sections. `src/styles/site.css` owns page styling and `src/styles/scenes.css` owns the illustrative window scenes, including their mobile variants. `src/lib/release.ts` is the single source for release URLs. Native disclosures handle FAQ interactions. Small scripts handle the mobile menu and copy-link action.
+`src/pages/index.astro` owns section order; `src/components/` owns the presentation sections and `src/components/apps/` the illustrative app windows (Codex, Claude, Cursor, Safari, Terminal, Paper). `src/styles/site.css` owns page styling, `src/styles/apps.css` the window internals (container queries simplify narrow tiles), and `src/styles/scenes.css` the scene layouts, including their mobile variants. `src/scripts/scene-motion.ts` loops each scene's window movement while it is the most visible one. `src/lib/release.ts` is the single source for release URLs. Native disclosures handle FAQ interactions. Small scripts handle the mobile menu and copy-link action.
 
 See `FRAMEWORK.md` for the researched framework decision and `VERIFICATION.md` for checks and limits.

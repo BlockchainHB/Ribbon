@@ -1,23 +1,19 @@
 ---
-import AgentWindow from './AgentWindow.astro';
-import EditorWindow from './EditorWindow.astro';
-import PreviewWindow from './PreviewWindow.astro';
-import WindowChrome from './WindowChrome.astro';
+import ClaudeWindow from './apps/ClaudeWindow.astro';
+import CodexWindow from './apps/CodexWindow.astro';
+import IdeWindow from './apps/IdeWindow.astro';
+import SafariWindow from './apps/SafariWindow.astro';
+import SceneToggle from './SceneToggle.astro';
 import '../styles/hero.css';
 ---
 <div class="motion-demo" data-motion="workspace">
   <div class="workspace-scene hero-stage" aria-hidden="true">
     <div class="scene-viewport" data-viewport>
       <div class="hero-track" data-track>
-        <div class="hero-slot hero-agent" data-agent><AgentWindow /></div>
-        <div class="hero-slot hero-editor" data-editor><EditorWindow compact /></div>
-        <div class="hero-slot hero-preview" data-preview><PreviewWindow /></div>
-        <div class="hero-slot hero-companion" data-companion>
-          <div class="example-window">
-            <WindowChrome title="Claude" />
-            <div class="hero-companion-content"><p class="agent-task">Review the changes</p><p>Keep the layout clear.</p></div>
-          </div>
-        </div>
+        <div class="hero-slot hero-agent"><CodexWindow /></div>
+        <div class="hero-slot hero-editor" data-editor><IdeWindow compact /></div>
+        <div class="hero-slot hero-preview" data-preview><SafariWindow /></div>
+        <div class="hero-slot hero-companion" data-companion><ClaudeWindow variant="review" /></div>
         <div class="hero-group-outline" data-group-outline></div>
       </div>
     </div>
@@ -27,7 +23,5 @@ import '../styles/hero.css';
     <span data-caption="group">Move windows together</span>
     <span data-caption="stack">Stack windows in one column</span>
   </div>
-  <button class="scene-replay" type="button" data-control="pause" aria-label="Pause workspace demonstration" hidden>
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g data-icon="pause"><path d="M9 5v14M15 5v14" /></g><g data-icon="play"><path d="m8 5 11 7-11 7Z" /></g><g data-icon="replay"><path d="M3 10a9 9 0 1 1 1.8 7.4M3 4v6h6" /></g></svg>
-  </button>
+  <SceneToggle label="workspace demonstration" class="hero-toggle" />
 </div>

@@ -1,9 +1,0 @@
----
-import AgentWindow from './AgentWindow.astro';
-import EditorWindow from './EditorWindow.astro';
-import DesignWindow from './DesignWindow.astro';
-import HeroScene from './HeroScene.astro';
-interface Props { variant?: 'hero' | 'coding' | 'design'; }
-const { variant = 'hero' } = Astro.props;
----
-{variant === 'hero' ? <HeroScene /> : <div class:list={['workspace-scene', 'pair-scene', { 'design-scene': variant === 'design' }]} aria-hidden="true"><AgentWindow design={variant === 'design'} />{variant === 'design' ? <DesignWindow /> : <EditorWindow />}</div>}

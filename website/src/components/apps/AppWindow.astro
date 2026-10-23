@@ -1,0 +1,12 @@
+---
+// Shared illustrative window shell. App components fill the toolbar and body.
+interface Props { app: string; title?: string; icon?: string; dark?: boolean; class?: string; [data: `data-${string}`]: string | boolean | undefined; }
+const { app, title, icon, dark = false, class: className, ...data } = Astro.props;
+---
+<div class:list={['example-window', `${app}-window`, { 'dark-window': dark }, className]} {...data}>
+  <div class="window-chrome">
+    <span class="traffic-lights"><i></i><i></i><i></i></span>
+    {Astro.slots.has('toolbar') ? <slot name="toolbar" /> : <span class="window-title">{icon && <img src={`/assets/${icon}.png`} width="16" height="16" alt="" loading="lazy" />}<span>{title}</span></span>}
+  </div>
+  <div class="window-body"><slot /></div>
+</div>
