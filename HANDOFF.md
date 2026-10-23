@@ -34,6 +34,29 @@ release script's provenance checks.
 
 ## Working setup
 
+**Latest user direction:** The user enabled the installed
+fixed-content build and reports **“its smooth”**. They request a deep research
+phase on preserving/improving scroll and resize animations after compaction.
+Read [animation research](docs/animation-research.md) for the baseline, concrete
+hypotheses, measurement constraints and outstanding work. The normal engine is
+may be active; do not interrupt it for fixture QA. The oversized-minimum focus
+review correction is committed/pushed on `fix/stable-native-content` at `3308572`,
+with an unrun native oversized test. Keep the smooth installed build intact.
+
+The animation research now has source-backed findings and reproducible windowless
+probes in `scripts/research-animation-{clock.swift,motion.py}`. The strongest lead
+is per-display wake timing plus one sampling decision per display tick; the
+existing profiler misses projection-only commits. A 27-trial Cocoa experiment
+and 44 pure-production-motion scenarios are recorded in the research document.
+No production animation changes, new native A/B, installation or release were
+performed during that research phase. The user then approved implementation.
+`perf/display-aware-animation` now adds an opt-in display-link clock, owner tick
+sampling, watchdogs and projection-aware profiling. Read the
+[experiment brief](docs/display-animation-experiment.md) for source boundaries,
+verification receipts and exact same-binary QA commands. The new clock remains
+off by default. The existing curve and installed app are unchanged; native
+fixture A/B and physical improvement remain unverified.
+
 **23 October investigation update:** `fix/stable-native-content` adds a
 fixture-only signed-app diagnostic and the
 [fixed-width edge investigation](docs/fixed-width-edge-investigation.md).

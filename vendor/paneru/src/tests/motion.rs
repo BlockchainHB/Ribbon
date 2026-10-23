@@ -9,6 +9,15 @@ use crate::config::{Config, MainOptions};
 
 #[test]
 fn scrolling_resizing_and_reordering_preserve_separation_each_frame() {
+    verify_separation(false);
+}
+
+#[test]
+fn owner_ticks_preserve_separation_through_resize_stack_and_reorder() {
+    verify_separation(true);
+}
+
+fn verify_separation(paced: bool) {
     let config: Config = (
         MainOptions {
             animation_speed: Some(14.0),
@@ -20,6 +29,11 @@ fn scrolling_resizing_and_reordering_preserve_separation_each_frame() {
         .into();
     let mut harness = TestHarness::new().with_config(config).with_windows(4);
     harness.advance(Duration::from_millis(800));
+    if paced {
+        harness
+            .world()
+            .insert_resource(crate::ecs::motion::FramePacing::default());
+    }
     let mut animated_sizes = 0;
     for operation in [
         Operation::Focus(Direction::First),
@@ -38,7 +52,16 @@ fn scrolling_resizing_and_reordering_preserve_separation_each_frame() {
         harness.world().write_message(Event::Command {
             command: Command::Window(operation),
         });
-        for _ in 0..40 {
+        for frame in 0..40 {
+            if paced {
+                let mut pacing = harness
+                    .world()
+                    .resource_mut::<crate::ecs::motion::FramePacing>();
+                pacing.due.clear();
+                if frame % 2 == 0 {
+                    pacing.due.insert(TEST_DISPLAY_ID);
+                }
+            }
             harness.advance(Duration::from_millis(20));
             let world = harness.world();
             let visible = world

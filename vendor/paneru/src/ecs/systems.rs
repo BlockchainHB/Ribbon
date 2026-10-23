@@ -731,7 +731,10 @@ pub(crate) fn pump_events(
     incoming_events: Option<NonSend<Receiver<Event>>>,
     platform: Option<NonSendMut<Pin<Box<PlatformCallbacks>>>>,
     activity: FrameActivity,
+    owners: super::motion::MotionOwners,
+    mut pacing: Option<ResMut<super::motion::FramePacing>>,
     mut timeout: Local<u32>,
+    mut backlogged: Local<bool>,
     mut last_tap_check: Local<Option<Instant>>,
 ) {
     let Some((ref mut platform, incoming_events)) = platform.zip(incoming_events) else {
@@ -739,11 +742,28 @@ pub(crate) fn pump_events(
         return;
     };
 
-    // Deliberately not paced to a frame period: waiting a full period put a
+    // The legacy path is deliberately not paced to a frame period: waiting a full period put a
     // floor under how soon a pump could start, so an event landing right after
     // one returned had to wait out the rest of it. That latency is worse than
     // the redundant work skipping the wait costs.
-    platform.pump_cocoa_event_loop(f64::from(*timeout) / 1000.0);
+    let otherwise = f64::from(*timeout) / 1000.0;
+    let wait = if pacing.is_some() {
+        platform.configure_animation_displays(&owners.active_displays());
+        if *backlogged {
+            0.0
+        } else {
+            platform.animation_wait(otherwise)
+        }
+    } else {
+        otherwise
+    };
+    {
+        let _wait = crate::performance::measure(crate::performance::Metric::PumpWait);
+        platform.pump_cocoa_event_loop(wait);
+    }
+    if let Some(pacing) = pacing.as_mut() {
+        pacing.due = platform.animation_ticks();
+    }
 
     let deadline = Instant::now() + PUMP_BUDGET;
     let mut received_events = Vec::new();
@@ -787,6 +807,7 @@ pub(crate) fn pump_events(
 
     received_events.extend(pending_mouse.take());
     messages.write_batch(received_events);
+    *backlogged = !drained;
 
     if drained {
         let frame_active = activity.mid_frame();

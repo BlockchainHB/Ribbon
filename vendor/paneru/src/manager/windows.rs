@@ -92,6 +92,8 @@ struct EnhancedUiGuard<F: FnOnce() -> Result<()>> {
 impl<F: FnOnce() -> Result<()>> Drop for EnhancedUiGuard<F> {
     fn drop(&mut self) {
         if let Some(restore) = self.restore.take() {
+            let _measurement =
+                crate::performance::measure(crate::performance::Metric::EnhancedRestore);
             let mut state = self
                 .state
                 .lock()
@@ -627,6 +629,7 @@ impl WindowOS {
         if self.enhanced_ui_absent.load(Ordering::Relaxed) {
             return None;
         }
+        let _measurement = crate::performance::measure(crate::performance::Metric::EnhancedAcquire);
         let pid = self.pid().ok()?;
         let state = self
             .enhanced_ui_state
@@ -893,6 +896,7 @@ impl WindowApi for WindowOS {
             trace!("already correct size.");
             return;
         }
+        let _measurement = crate::performance::measure(crate::performance::Metric::ResizeRoundtrip);
         let previous_frame = self.frame;
         let target_origin = previous_frame.min;
         let _enhanced_ui = self.disable_enhanced_ui();

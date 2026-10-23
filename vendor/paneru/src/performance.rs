@@ -1,6 +1,8 @@
 //! Opt-in, bounded engine measurements. No window titles, content or per-frame I/O.
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::LazyLock;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
@@ -29,9 +31,17 @@ pub(crate) enum Metric {
     SizeWrite,
     PositionWrite,
     InputToGeometry,
+    PumpWait,
+    ActiveInterval,
+    ProjectionTransform,
+    ProjectionClip,
+    ProjectionVisibility,
+    ResizeRoundtrip,
+    EnhancedAcquire,
+    EnhancedRestore,
 }
 
-const METRICS: [(Metric, &str); 12] = [
+const METRICS: [(Metric, &str); 20] = [
     (Metric::ActiveFrame, "active_frame_work"),
     (Metric::IdleWork, "idle_frame_work"),
     (Metric::Layout, "presentation_layout"),
@@ -47,6 +57,14 @@ const METRICS: [(Metric, &str); 12] = [
         Metric::InputToGeometry,
         "key_receipt_to_first_geometry_write",
     ),
+    (Metric::PumpWait, "cocoa_pump_wait"),
+    (Metric::ActiveInterval, "active_frame_interval"),
+    (Metric::ProjectionTransform, "projection_transform"),
+    (Metric::ProjectionClip, "projection_clip"),
+    (Metric::ProjectionVisibility, "projection_visibility"),
+    (Metric::ResizeRoundtrip, "native_resize_roundtrip"),
+    (Metric::EnhancedAcquire, "enhanced_ui_acquire"),
+    (Metric::EnhancedRestore, "enhanced_ui_restore"),
 ];
 
 struct Samples {
@@ -124,6 +142,52 @@ struct Profile {
     samples: [Samples; METRICS.len()],
     input_events: AtomicU64,
     pending_input_us: AtomicU64,
+    displays: Mutex<HashMap<u32, DisplaySamples>>,
+}
+
+#[derive(Default)]
+struct DisplaySamples {
+    callback: Samples,
+    consumed: Samples,
+    last_callback: Option<Instant>,
+    last_consumed: Option<Instant>,
+}
+
+/// Opt-in only, bounded by display IDs rather than titles/window identities.
+pub(crate) fn display_tick(display: u32, consumed: bool) {
+    let Some(profile) = PROFILE.as_ref() else {
+        return;
+    };
+    let mut displays = profile
+        .displays
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if !displays.contains_key(&display) && displays.len() >= 32 {
+        return;
+    }
+    let samples = displays.entry(display).or_default();
+    let (last, histogram) = if consumed {
+        (&mut samples.last_consumed, &samples.consumed)
+    } else {
+        (&mut samples.last_callback, &samples.callback)
+    };
+    let now = Instant::now();
+    if let Some(previous) = last.replace(now) {
+        histogram.record(now.duration_since(previous));
+    }
+}
+
+pub(crate) fn display_stopped(display: u32) {
+    if let Some(profile) = PROFILE.as_ref() {
+        let mut displays = profile
+            .displays
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(samples) = displays.get_mut(&display) {
+            samples.last_callback = None;
+            samples.last_consumed = None;
+        }
+    }
 }
 
 static PROFILE: LazyLock<Option<Profile>> = LazyLock::new(|| {
@@ -136,6 +200,7 @@ static PROFILE: LazyLock<Option<Profile>> = LazyLock::new(|| {
             samples: std::array::from_fn(|_| Samples::default()),
             input_events: AtomicU64::new(0),
             pending_input_us: AtomicU64::new(0),
+            displays: Mutex::new(HashMap::new()),
         })
 });
 
@@ -191,12 +256,20 @@ pub(crate) fn geometry_written() {
 }
 
 fn writes(profile: &Profile) -> u64 {
-    profile.samples[Metric::SizeWrite as usize]
-        .count
-        .load(Ordering::Relaxed)
-        + profile.samples[Metric::PositionWrite as usize]
+    [
+        Metric::SizeWrite,
+        Metric::PositionWrite,
+        Metric::ProjectionTransform,
+        Metric::ProjectionClip,
+        Metric::ProjectionVisibility,
+    ]
+    .iter()
+    .map(|metric| {
+        profile.samples[*metric as usize]
             .count
             .load(Ordering::Relaxed)
+    })
+    .sum()
 }
 
 #[derive(Resource, Default)]
@@ -204,13 +277,22 @@ struct FrameProbe {
     started: Option<Instant>,
     writes: u64,
     active: bool,
+    previous: Option<Instant>,
+    was_active: bool,
 }
 
 fn begin_frame(mut probe: ResMut<FrameProbe>, activity: FrameActivity) {
     if let Some(profile) = PROFILE.as_ref() {
-        probe.started = Some(Instant::now());
+        let now = Instant::now();
+        probe.started = Some(now);
         probe.writes = writes(profile);
         probe.active = activity.mid_frame();
+        if let Some(previous) = probe.previous.replace(now)
+            && probe.was_active
+            && probe.active
+        {
+            profile.samples[Metric::ActiveInterval as usize].record(now.duration_since(previous));
+        }
     }
 }
 
@@ -232,6 +314,7 @@ fn end_frame(
             Metric::IdleWork
         };
         profile.samples[metric as usize].record(started.elapsed());
+        probe.was_active = matches!(metric, Metric::ActiveFrame);
     }
     // A boundary key may legitimately cause no movement. Do not charge the
     // next unrelated frame to that key. Bursts measure the latest receipt.
@@ -252,13 +335,19 @@ fn flush(profile: &Profile) -> std::io::Result<()> {
         })
         .collect();
     let report = json!({
-        "version": 1,
+        "version": 2,
+        "animation_clock": if crate::platform::animation::enabled() { "display-link" } else { "legacy" },
         "comparison_mode": if profile.comparison_baseline { "uncapped_sequential" } else { "optimized" },
         "elapsed_ms": profile.started.elapsed().as_millis(),
         "bucket_us": BUCKET_US,
         "key_receipts": profile.input_events.load(Ordering::Relaxed),
         "note": "Inclusive overlapping durations; native counters include startup and restoration. Frame work excludes event-loop waiting and exit restoration. Percentiles are histogram upper bounds, not compositor frame times.",
         "metrics": metrics,
+        "displays": profile.displays.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+            .iter().map(|(id, samples)| (id.to_string(), json!({
+                "callback_interval": samples.callback.snapshot(),
+                "consumed_tick_interval": samples.consumed.snapshot(),
+            }))).collect::<serde_json::Map<_, _>>(),
     });
     if let Some(parent) = profile
         .output

@@ -32,6 +32,8 @@ enum DesktopVerification {
     var detail: String?
     var engineSHA256: String?
     var displays: [DisplaySnapshot] = []
+    var animationClock =
+      CommandLine.arguments.contains("--qa-display-clock") ? "display-link" : "legacy"
   }
   struct DisplaySnapshot: Encodable {
     let name: String
