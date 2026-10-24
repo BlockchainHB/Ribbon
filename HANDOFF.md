@@ -1,6 +1,6 @@
 # Ribbon handoff
 
-Snapshot: **22 October 2026, America/Toronto**. Open
+Snapshot: **23 October 2026, America/Toronto**. Open
 `/Users/neat/dev/Ribbon` as the project in T3 Code. Read [AGENTS.md](AGENTS.md),
 then the relevant source/documentation below. Commands use ordinary Git, shell,
 Rust, Swift and Node tooling; this handoff does not depend on the previous chat.
@@ -18,12 +18,12 @@ work into `main` at `113ad65efd40544e73cd5ac1434552d3024ad54d`:
 | `b9b1cfe` | Batch native frame reads, sample intermediate geometry per display, add opt-in profiling |
 | `8c7296b` | Remove the fixed return-width gate and restore exposed size directly after reveal |
 
-This handoff update prepares **0.2.0 build 18 / `v0.2.0-beta.2`**. Read
+The current release branch prepares **0.2.0 build 19 / `v0.2.0-beta.3`**. Read
 [release.json](release.json) for the configured version and
 [GitHub Releases](https://github.com/BlockchainHB/Ribbon/releases) for actual
 publication state. A configured tag or a local archive does not establish that
 publication/notarization succeeded. The prior public prerelease is
-`v0.2.0-beta.1`; its existing assets must remain intact.
+`v0.2.0-beta.2`; existing release assets must remain intact.
 
 At snapshot, the installed local app was `~/Applications/Ribbon.app`, open and
 paused. Recheck before installing or testing. Do not stop a newly active user
@@ -33,6 +33,17 @@ A public package must instead record its clean committed source and pass the
 release script's provenance checks.
 
 ## Working setup
+
+**Release authorization:** The user explicitly requested merging the fixes,
+updating the public release and website download, and installing the build on
+their Mac. PRs #8 and #9 merged into `main` at `fd4ba27`; its source tree matches
+the verified #9 head `3b82264`. `release/v0.2.0-beta.3` contains only the next
+version/build and release documentation/download links. The display-link clock
+stays off by default. Publish and verify the new assets before merging the
+release metadata that switches the live website download. Recheck actual release,
+CI, notarization, website and installed app state rather than inferring success
+from these preparation notes. Installation is now authorized once the existing
+app has quit; retain normal pause behavior.
 
 **Latest user direction:** The user enabled the installed
 fixed-content build and reports **“its smooth”**. They request a deep research
