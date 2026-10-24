@@ -211,7 +211,7 @@ from native AX resize pacing and record phase-specific geometry/latency before
 changing either. The current evidence supports neither default enablement nor
 removing resize correctness guards.
 
-### Oversized fixture correction and remaining validation
+### Oversized fixture correction and focus retest
 
 A hidden, never-ordered-front AppKit probe reproduced the failure: with empty
 `NSHostingView.sizingOptions`, deferred layout changed a manually assigned
@@ -222,6 +222,35 @@ ordinary fixture sizing options remain unchanged.
 
 Proofs: `hidden-minimum-deferred-proof.json` and `hidden-minimum-fixed-proof.json`
 under `build/research/animation-20261023/`. This verifies the fixture setup
-mechanism without showing a window or interrupting normal use. The corrected
-full oversized **desktop focus test has not rerun**. The A/B and pairing passes
-above belong to the signed `e4bff50` bundle, before this fixture-only correction.
+mechanism without showing a window or interrupting normal use. The A/B and pairing
+passes above belong to the signed `e4bff50` bundle, before this fixture correction.
+
+The user then explicitly requested the full focus retest. The corrected fixture
+on `66608f7` passed native focus on **both monitors**, but its legacy-mode run
+failed during pause/recovery. Independent fixture readback showed that the engine
+had already restored both oversized frames exactly (2,760 points on the external
+display, 1,928 on the laptop). Swift recovery nevertheless requested smaller
+display-fitted widths, then retained its journal when native minimums refused.
+Failed receipt: `build/qa/animation-focus-20261023-a/legacy-focus/`.
+
+`74fef1f` fixes that false recovery debt: accept a matching saved oversized frame
+whose center is on a connected display. Normal, unrestored, new and disconnected
+windows retain the existing fit policy. Four Swift regressions cover these
+boundaries. `oversized-recovery-final-verify.log` records passing formatting,
+strict Clippy, 516/433 engine, 46/39 library and **30 Swift** tests. The signed
+release-profile candidate's source, signature and engine hash were checked.
+
+Final desktop retest: **legacy and display-link modes each passed all 9 checks**,
+including genuine oversized native minimums receiving stable native focus on
+each owner monitor, unchanged content size during focus, exclusions, exact frame
+restoration, cleared recovery journal and start/pause/start. Each run took about
+6.3–6.5 seconds. Both used source
+`74fef1fb5519ffe884ade98444fa18775bc54c5c`, signed engine SHA-256
+`4f809d9fa98e48413ce5e4baf5fd610f3777e267621214f61fe0ebae83a0cf51`.
+
+Final receipts: `build/qa/animation-focus-20261023-b/{legacy-focus,clock-focus}/`;
+runner log `build/research/animation-20261023/focus-retest-b.log`; signed build
+receipt `signed-oversized-recovery-candidate.json` in that research directory.
+All owned test processes stopped, and the installed app remains unchanged.
+These are native geometry/focus/lifecycle results, not new performance or
+compositor-delivery evidence. The experimental clock remains off by default.

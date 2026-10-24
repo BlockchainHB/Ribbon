@@ -38,10 +38,11 @@ release script's provenance checks.
 fixed-content build and reports **“its smooth”**. They request a deep research
 phase on preserving/improving scroll and resize animations after compaction.
 Read [animation research](docs/animation-research.md) for the baseline, concrete
-hypotheses, measurement constraints and outstanding work. The normal engine is
+hypotheses, measurement constraints and outstanding work. The normal engine
 may be active; do not interrupt it for fixture QA. The oversized-minimum focus
 review correction is committed/pushed on `fix/stable-native-content` at `3308572`,
-with an unrun native oversized test. Keep the smooth installed build intact.
+and now confirmed by native focus/lifecycle checks under `74fef1f` in both modes.
+Keep the smooth installed build intact.
 
 The animation research now has source-backed findings and reproducible windowless
 probes in `scripts/research-animation-{clock.swift,motion.py}`. The strongest lead
@@ -60,7 +61,10 @@ authorized a safe interval: signed engine `e4bff50` passed four A/B/B/A runs
 20.6% and native resize round-trip time rose 48.1%, so keep the clock gated.
 Physical compositor improvement remains unverified. A separate oversized test
 failed its fixture-minimum precondition; a hidden AppKit probe reproduced and
-verified a fixture correction, but full oversized desktop focus QA has not rerun.
+verified a fixture correction. The requested focus retest then exposed false
+recovery debt for already restored oversized frames; the narrow native bridge
+fix at `74fef1f` passes all 9 focus/lifecycle checks in both timing modes on both
+monitors, plus full verification with 30 Swift tests. All test processes stopped.
 See the experiment's results section for hashes, receipts and limits.
 
 **23 October investigation update:** `fix/stable-native-content` adds a
