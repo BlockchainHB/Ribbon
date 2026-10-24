@@ -104,15 +104,24 @@ impl Projections {
             return Err(Error::Generic("compositor attachment is pending".into()));
         }
         if entry.viewport != viewport {
+            let _measurement =
+                crate::performance::measure(crate::performance::Metric::ProjectionClip);
             self.api.clip(entry.space, viewport)?;
+            crate::performance::geometry_written();
             entry.viewport = viewport;
         }
         if !entry.visible || entry.offset != offset {
+            let _measurement =
+                crate::performance::measure(crate::performance::Metric::ProjectionTransform);
             self.api.translate(entry.space, offset)?;
+            crate::performance::geometry_written();
             entry.offset = offset;
         }
         if !entry.visible {
+            let _measurement =
+                crate::performance::measure(crate::performance::Metric::ProjectionVisibility);
             self.api.visible(entry.space, true)?;
+            crate::performance::geometry_written();
             entry.visible = true;
         }
         Ok(())
@@ -122,7 +131,10 @@ impl Projections {
         if let Some(entry) = self.entries.get_mut(&window)
             && entry.visible
         {
+            let _measurement =
+                crate::performance::measure(crate::performance::Metric::ProjectionVisibility);
             self.api.visible(entry.space, false)?;
+            crate::performance::geometry_written();
             entry.visible = false;
         }
         Ok(())

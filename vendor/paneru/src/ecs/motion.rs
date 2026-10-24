@@ -4,22 +4,41 @@ use crate::manager::Display;
 use bevy::ecs::{
     entity::Entity,
     hierarchy::ChildOf,
-    system::{Query, SystemParam},
+    query::{Or, With},
+    resource::Resource,
+    system::{Query, Res, SystemParam},
 };
 use bevy::math::{DVec2, IVec2};
+use std::collections::{HashMap, HashSet};
 
-/// Resolve the owner from the canonical strip membership, without another cache.
-#[derive(SystemParam)]
-pub(super) struct MotionCadence<'w, 's> {
-    strips: Query<'w, 's, (&'static LayoutStrip, &'static ChildOf)>,
-    displays: Query<'w, 's, &'static Display>,
+/// Presence enables the experiment. Only this frame's owner ticks are stored;
+/// layout, widths and membership remain in their existing ECS components.
+#[derive(Default, Resource)]
+pub(crate) struct FramePacing {
+    pub due: HashSet<u32>,
 }
 
-impl MotionCadence<'_, '_> {
-    pub fn interval_for(&self, entity: Entity) -> f64 {
-        if crate::performance::comparison_baseline() {
-            return 0.0;
-        }
+/// Resolve the owner from the canonical strip membership, without another cache.
+type MovingEntities<'w, 's> = Query<
+    'w,
+    's,
+    Entity,
+    Or<(
+        With<super::RepositionMarker>,
+        With<super::ResizeMarker>,
+        With<super::Scrolling>,
+    )>,
+>;
+
+#[derive(SystemParam)]
+pub(crate) struct MotionOwners<'w, 's> {
+    strips: Query<'w, 's, (&'static LayoutStrip, &'static ChildOf)>,
+    displays: Query<'w, 's, &'static Display>,
+    moving: MovingEntities<'w, 's>,
+}
+
+impl MotionOwners<'_, '_> {
+    fn display_for(&self, entity: Entity) -> Option<&Display> {
         let parent = self
             .strips
             .get(entity)
@@ -30,9 +49,42 @@ impl MotionCadence<'_, '_> {
                     .iter()
                     .find_map(|(strip, parent)| strip.contains(entity).then_some(parent))
             });
-        parent
-            .and_then(|parent| self.displays.get(parent.parent()).ok())
-            .map_or(1.0 / 120.0, Display::animation_interval)
+        parent.and_then(|parent| self.displays.get(parent.parent()).ok())
+    }
+
+    pub fn active_displays(&self) -> Vec<(u32, f64)> {
+        self.moving
+            .iter()
+            .filter_map(|entity| self.display_for(entity))
+            .map(|display| (display.id(), display.animation_interval()))
+            .collect::<HashMap<_, _>>()
+            .into_iter()
+            .collect()
+    }
+}
+
+#[derive(SystemParam)]
+pub(super) struct MotionCadence<'w, 's> {
+    owners: MotionOwners<'w, 's>,
+    pacing: Option<Res<'w, FramePacing>>,
+}
+
+impl MotionCadence<'_, '_> {
+    pub fn interval_for(&self, entity: Entity) -> f64 {
+        if crate::performance::comparison_baseline() {
+            return 0.0;
+        }
+        let display = self.owners.display_for(entity);
+        if let (Some(pacing), Some(display)) = (&self.pacing, display) {
+            // New intent and endpoints still bypass sampling inside Motion.
+            // An owner tick must not pass through another elapsed-time cap.
+            return if pacing.due.contains(&display.id()) {
+                0.0
+            } else {
+                f64::INFINITY
+            };
+        }
+        display.map_or(1.0 / 120.0, Display::animation_interval)
     }
 }
 
@@ -132,6 +184,66 @@ impl Motion {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn moving_displays(world: &mut bevy::ecs::world::World) -> [Entity; 2] {
+        use bevy::math::IRect;
+        let mut members = Vec::new();
+        for (id, hz) in [(2, 60.0), (1, 120.0)] {
+            let display = world
+                .spawn(Display::new(id, IRect::new(0, 0, 2560, 1440), 0).with_refresh_rate(hz))
+                .id();
+            let member = world
+                .spawn(super::super::ResizeMarker(IVec2::new(800, 900)))
+                .id();
+            let mut strip = LayoutStrip::new(u64::from(id), 0);
+            strip.append(member);
+            world.spawn((strip, ChildOf(display)));
+            members.push(member);
+        }
+        [members[0], members[1]]
+    }
+
+    #[test]
+    fn pacing_uses_canonical_owner_and_only_the_owner_tick() {
+        use bevy::ecs::{system::SystemState, world::World};
+        let mut world = World::new();
+        let [external, laptop] = moving_displays(&mut world);
+        world.insert_resource(FramePacing {
+            due: HashSet::from([1]),
+        });
+        let mut state = SystemState::<MotionCadence>::new(&mut world);
+        let cadence = state.get(&world).unwrap();
+        assert!(cadence.interval_for(external).is_infinite());
+        assert!(cadence.interval_for(laptop).abs() < f64::EPSILON);
+        let mut displays = cadence.owners.active_displays();
+        displays.sort_by_key(|(id, _)| *id);
+        assert_eq!(displays, vec![(1, 1.0 / 120.0), (2, 1.0 / 60.0)]);
+        world
+            .entity_mut(external)
+            .remove::<super::super::ResizeMarker>();
+        let cadence = state.get(&world).unwrap();
+        assert_eq!(cadence.owners.active_displays(), vec![(1, 1.0 / 120.0)]);
+    }
+
+    #[test]
+    fn display_tick_bypasses_second_cap_but_input_and_endpoint_remain_immediate() {
+        let mut motion = Motion::default();
+        let target = IVec2::splat(2000);
+        let first = motion
+            .step(IVec2::ZERO, target, 14.0, 0.001, f64::INFINITY)
+            .0;
+        assert!(first.x > 0);
+        let held = motion.step(first, target, 14.0, 0.001, f64::INFINITY).0;
+        assert_eq!(held, first);
+        let tick = motion.step(held, target, 14.0, 0.006, 0.0).0;
+        assert!(tick.x > held.x);
+        let new_target = IVec2::splat(4000);
+        let retarget = motion.step(tick, new_target, 14.0, 0.001, f64::INFINITY).0;
+        assert!(retarget.x > tick.x);
+        let (end, finished) = motion.step(retarget, new_target, 14.0, 0.5, f64::INFINITY);
+        assert!(finished);
+        assert_eq!(end, new_target);
+    }
 
     #[test]
     fn reversal_between_samples_starts_at_the_last_presented_frame() {

@@ -44,7 +44,7 @@ pub mod focus;
 pub mod layout;
 #[cfg(feature = "lua")]
 pub mod layout_ops;
-mod motion;
+pub(crate) mod motion;
 pub mod mouse;
 pub mod params;
 pub(crate) mod projection;
@@ -131,6 +131,9 @@ pub fn register_systems(app: &mut bevy::app::App) {
     const APP_OBSERVABILITY_CHECK_FREQ: Duration = Duration::from_millis(200);
 
     crate::performance::register(app);
+    if crate::platform::animation::enabled() {
+        app.init_resource::<motion::FramePacing>();
+    }
 
     let not_swiping = |scrolling: Query<&Scrolling, With<ActiveWorkspaceMarker>>| {
         scrolling

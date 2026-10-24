@@ -10,6 +10,14 @@ The upstream default-feature test suite is also retained.
 
 Local changes:
 
+- Gated animation timing: `RIBBON_ANIMATION_CLOCK=display-link` uses main-thread
+  owner-display callbacks and a missing-tick watchdog; idle links are invalidated.
+  ECS resolves motion owners from strip membership and samples once per owner
+  tick while preserving the curve, immediate intent and exact endpoints. Unset
+  keeps legacy timing. Opt-in profiling includes projection calls, Cocoa waits,
+  active intervals, resize/guard costs and bounded per-display tick histograms.
+  See `../../docs/display-animation-experiment.md`. Dependencies remain pinned.
+
 - Oversized-minimum focus: a safely owner-anchored projected window can receive
   native focus after its strip and native geometry settle, even when its minimum
   size cannot fit inside the viewport. Ordinary partial/parked/pending windows

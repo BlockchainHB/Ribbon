@@ -30,6 +30,7 @@ use process::ProcessHandler;
 pub use process::ProcessSerialNumber;
 pub use workspace::WorkspaceObserver;
 
+pub(crate) mod animation;
 pub(crate) mod app_launcher;
 mod display;
 pub(crate) mod input;
@@ -242,6 +243,7 @@ pub struct PlatformCallbacks {
     cocoa_app: Retained<NSApplication>,
     /// The main `EventSender` for dispatching events across the application.
     events: EventSender,
+    animation: Option<animation::DisplayLinks>,
     /// Handler for Carbon process events.
     process_handler: Option<PinnedProcessHandler>,
     /// Handler for low-level input events (keyboard, mouse, gestures).
@@ -285,6 +287,7 @@ impl PlatformCallbacks {
         Box::pin(PlatformCallbacks {
             main_thread_marker,
             cocoa_app,
+            animation: None,
             process_handler: None,
             event_handler: None,
             workspace_observer,
@@ -348,6 +351,34 @@ impl PlatformCallbacks {
         // Safety: the handler is pinned in its Box for the life of the daemon,
         // and reviving the tap does not move it.
         unsafe { handler.as_mut().get_unchecked_mut() }.ensure_tap_alive()
+    }
+
+    pub(crate) fn configure_animation_displays(&mut self, displays: &[(u32, f64)]) {
+        if displays.is_empty() {
+            // Invalidate links and release their retained callbacks when idle.
+            self.animation = None;
+        } else {
+            self.animation
+                .get_or_insert_with(|| {
+                    animation::DisplayLinks::new(
+                        self.events.waker().clone(),
+                        self.main_thread_marker,
+                    )
+                })
+                .configure(displays);
+        }
+    }
+
+    pub(crate) fn animation_wait(&self, otherwise: f64) -> f64 {
+        self.animation
+            .as_ref()
+            .map_or(otherwise, |clock| clock.wait(otherwise))
+    }
+
+    pub(crate) fn animation_ticks(&mut self) -> std::collections::HashSet<u32> {
+        self.animation
+            .as_mut()
+            .map_or_else(Default::default, animation::DisplayLinks::take_due)
     }
 
     /// Returns `true` when at least one event was dispatched this pass.

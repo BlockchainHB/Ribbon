@@ -113,9 +113,12 @@ final class FixtureDelegate: NSObject, NSApplicationDelegate {
       requestedIndex ?? (dualDisplays ? min((number - 1) / 4, screens.count - 1) : 0)
     let bounds = screens[screenIndex].visibleFrame
     let offset = dualDisplays ? (number - 1) % 4 : number - 1
+    let oversizedMinimum =
+      !sentinel && offset == 0 && CommandLine.arguments.contains("--oversized-minimums")
     let initialContent = NSRect(
       x: bounds.minX + 100 + Double(offset * 55),
-      y: bounds.minY + 160 + Double(offset * 35), width: 560, height: 420)
+      y: bounds.minY + 160 + Double(offset * 35),
+      width: oversizedMinimum ? bounds.width + 200 : 560, height: 420)
     let window = NSWindow(
       contentRect: initialContent,
       styleMask: [.titled, .closable, .resizable, .miniaturizable],
@@ -124,14 +127,16 @@ final class FixtureDelegate: NSObject, NSApplicationDelegate {
     window.isReleasedWhenClosed = false
     window.tabbingMode = .disallowed
     window.minSize = NSSize(width: 260, height: 180)
-    if !sentinel && offset == 0 && CommandLine.arguments.contains("--oversized-minimums") {
-      window.minSize.width = bounds.width + 200
-    }
     let name = ["Editor", "Browser", "Terminal", "Notes"][(number - 1) % 4]
     let host = NSHostingView(
-      rootView: FixtureView(number: number, name: name, sentinel: sentinel))
-    host.sizingOptions = []
+      rootView: FixtureView(number: number, name: name, sentinel: sentinel)
+        .frame(
+          minWidth: oversizedMinimum ? bounds.width + 200 : nil,
+          minHeight: oversizedMinimum ? 180 : nil))
+    host.sizingOptions = oversizedMinimum ? [.minSize] : []
     window.contentView = host
+    // Derive the oversized minimum from the hosting view. With empty sizing
+    // options its deferred layout would clear a manually assigned minimum.
     window.setFrame(
       NSWindow.frameRect(forContentRect: initialContent, styleMask: window.styleMask), display: true
     )

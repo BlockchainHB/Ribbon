@@ -35,6 +35,7 @@ final class SessionController: ObservableObject {
   private var expectedExit = false
   private var commandInFlight = false
   private var restorationInFlight = false
+  private var qaEngineLaunches = 0
   @Published private(set) var reduceMotion = NSWorkspace.shared
     .accessibilityDisplayShouldReduceMotion
   private var accessibilityObserver: NSObjectProtocol?
@@ -124,7 +125,7 @@ final class SessionController: ObservableObject {
       policy.scope = .demo
       policy.excludedBundleIDs = []
     }
-    return [
+    var environment = [
       "PANERU_MACH_SERVICE": CommandLine.arguments.contains("--qa-output")
         ? "dev.ribbon.qa.\(getpid())" : "dev.ribbon.engine.\(getuid())",
       "PANERU_CONFIG": store.directory.appendingPathComponent("engine.toml").path,
@@ -133,6 +134,11 @@ final class SessionController: ObservableObject {
 
       "RIBBON_PARENT_PID": String(getpid()), "RUST_LOG": "error",
     ].merging(policy.engineScopeEnvironment) { _, new in new }
+    if CommandLine.arguments.contains("--qa-output") {
+      environment["RIBBON_ANIMATION_CLOCK"] =
+        CommandLine.arguments.contains("--qa-display-clock") ? "display-link" : "legacy"
+    }
+    return environment
   }
 
   func refreshApps() {
@@ -269,6 +275,12 @@ final class SessionController: ObservableObject {
         child.standardError = handle
         child.environment?["RUST_LOG"] =
           "warn,paneru::ecs::focus=trace,paneru::manager::windows=debug,paneru::manager::projection=debug,paneru::ecs::projection=trace,paneru::commands=debug,paneru::ecs::systems=debug"
+        if CommandLine.arguments.contains("--qa-profile") {
+          qaEngineLaunches += 1
+          child.environment?["RUST_LOG"] = "warn"
+          child.environment?["RIBBON_PERF_OUTPUT"] =
+            store.directory.appendingPathComponent("performance-\(qaEngineLaunches).json").path
+        }
       }
       child.terminationHandler = { [weak self] process in
         Task { @MainActor in self?.engineExited(process) }
