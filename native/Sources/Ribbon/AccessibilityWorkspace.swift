@@ -82,7 +82,8 @@ enum AccessibilityWorkspace {
           let record = records.first { $0.windowID == id }
           // New windows have no pre-session placement: recover visibility, without
           // assigning a prior process's saved geometry to a reused window ID.
-          let target = fitted(record?.frame.rect ?? currentFrame, to: displays)
+          let target = recoveryTarget(
+            saved: record?.frame.rect, current: currentFrame, displays: displays)
           if approximatelyEqual(currentFrame, target) {
             restored += 1
             continue
@@ -157,6 +158,21 @@ enum AccessibilityWorkspace {
     }
     guard let value else { return false }
     return AXUIElementSetAttributeValue(window, attribute as CFString, value) == .success
+  }
+
+  static func recoveryTarget(saved: CGRect?, current: CGRect, displays: [CGRect]) -> CGRect {
+    // The engine can already have restored an oversized native minimum exactly.
+    // Do not request a smaller, impossible frame and retain a false recovery debt.
+    // Offscreen originals still need fitting after a display disconnect.
+    if let saved, approximatelyEqual(current, saved),
+      let display = displays.first(where: {
+        $0.contains(CGPoint(x: saved.midX, y: saved.midY))
+      }),
+      saved.width > display.width || saved.height > display.height
+    {
+      return saved
+    }
+    return fitted(saved ?? current, to: displays)
   }
 
   private static func fitted(_ original: CGRect, to displays: [CGRect]) -> CGRect {
