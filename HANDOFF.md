@@ -54,8 +54,14 @@ performed during that research phase. The user then approved implementation.
 sampling, watchdogs and projection-aware profiling. Read the
 [experiment brief](docs/display-animation-experiment.md) for source boundaries,
 verification receipts and exact same-binary QA commands. The new clock remains
-off by default. The existing curve and installed app are unchanged; native
-fixture A/B and physical improvement remain unverified.
+off by default. The existing curve and installed app are unchanged. The user
+authorized a safe interval: signed engine `e4bff50` passed four A/B/B/A runs
+(11 checks each) and a separate 21-check pairing run. Total active work rose
+20.6% and native resize round-trip time rose 48.1%, so keep the clock gated.
+Physical compositor improvement remains unverified. A separate oversized test
+failed its fixture-minimum precondition; a hidden AppKit probe reproduced and
+verified a fixture correction, but full oversized desktop focus QA has not rerun.
+See the experiment's results section for hashes, receipts and limits.
 
 **23 October investigation update:** `fix/stable-native-content` adds a
 fixture-only signed-app diagnostic and the

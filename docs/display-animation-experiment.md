@@ -107,13 +107,17 @@ use the same signed app bytes for both cases and a fresh directory each time:
 ```sh
 mkdir -p build/qa/animation-legacy-FRESH
 open -n -a "$CANDIDATE_APP" --args \
+  -ApplePersistenceIgnoreState YES \
   --qa-fixed-content --qa-dual --qa-profile \
   --qa-output "$PWD/build/qa/animation-legacy-FRESH/report.json"
+open -a "$CANDIDATE_APP"
 
 mkdir -p build/qa/animation-clock-FRESH
 open -n -a "$CANDIDATE_APP" --args \
+  -ApplePersistenceIgnoreState YES \
   --qa-fixed-content --qa-dual --qa-profile --qa-display-clock \
   --qa-output "$PWD/build/qa/animation-clock-FRESH/report.json"
+open -a "$CANDIDATE_APP"
 ```
 
 Run cases sequentially, finish cleanup and quit only the owned QA app between
@@ -134,3 +138,90 @@ as well as CPU/native call counts. Existing 60 Hz native frame samples prove
 geometry only; 120 Hz delivery needs separate compositor/physical evidence.
 Do not enable the experiment by default or replace the user's smooth installed
 build based solely on source tests or callback frequency.
+
+## Native comparison results — 23 October 2026
+
+**Keep legacy timing as the default.** The display-link candidate passes the
+normal content/focus/pairing gates, but this workload shows a resize-cost tradeoff
+large enough to withhold promotion. No installed build was replaced.
+
+All measured cases used the exact same certificate-signed release-profile engine
+from `e4bff50bfda374d78c44376b33d272390a4f1513`, SHA-256
+`d1350081aa20178b4e0bf1d30e66fe2f73989710c9fe8ddf0a7956bce2d005f0`.
+The external monitor was 2560×1440 / 60 Hz; laptop 1728×1117 / 120 Hz; both 2×.
+The user explicitly authorized the paused, unlocked two-monitor interval.
+
+- A/B/B/A: `legacy-a`, `clock-a`, `clock-b`, `legacy-b`. Each passed all **11
+  native checks**, in approximately 20.5–20.7 seconds. These repeated checks
+  cover fixed native content dimensions, native anchor ownership, independent
+  public WindowServer geometry, visible focus, interrupted width changes,
+  exclusions, restoration and start/pause/start. They are not 44 unique checks.
+- Separate `clock-pairing`: all **21 checks** passed, including pair ratios,
+  reordering, hidden activation and ungrouping. It is excluded from performance
+  comparisons because its workload differs.
+- Separate `clock-oversized`: failed the **fixture setup precondition** before
+  oversized focus was exercised. It is not a focus pass or an engine-regression
+  result. The fixture reported zero native minimum widths, including windows
+  intended to exceed their monitor's width.
+- All owned engine, QA app, fixture and sentinel processes stopped after the
+  runs. The installed engine remains
+  `2aca30607c21133066dc1a5f23d5dd7c5ccaacef07800089c91d47e997d0a58d`.
+
+Median of two runs per mode, using each main session's `performance-1.json`:
+
+| Engine-side measure | Legacy | Display-link | Change |
+| --- | ---: | ---: | ---: |
+| Active engine frames | 1,247 | 892.5 | −28.4% |
+| Total active-frame work | 966.9 ms | 1,166.2 ms | +20.6% |
+| Per-run p95 active-work upper bound | 3.75 ms | 6.25 ms | +66.7% |
+| Per-run p99 active-interval upper bound | 18.75 ms | 17.00 ms | −9.3% |
+| Native size calls | 187 | 195 | +4.3% |
+| Total native resize round trips | 542.3 ms | 803.2 ms | +48.1% |
+| Projection transform calls | 1,022.5 | 1,090.5 | +6.7% |
+
+Fewer engine frames do not establish lower work or CPU. Active-work spans include
+native waiting; they exclude the event-pump wait. Resize, guard and frame spans
+overlap. Native counts include startup, setup and restoration, so this does not
+isolate the deliberate-resize phase or establish why its aggregate cost rose.
+The table's percentile entries are medians of **per-run histogram upper bounds**,
+not pooled exact percentiles. Buckets are 0.5 ms and only two repetitions were run.
+
+Laptop callback and consumed-tick p50/p95 upper bounds were 8.5 ms in both clock
+runs. External p50/p95 upper bounds were 17 ms. Individual callbacks still stalled
+during native work. These timestamps do not prove physical 120 Hz delivery.
+This IPC-driven workload generated **zero key-receipt latency samples**, so no
+input-latency improvement is claimed. The external CPU sampler missed the first
+baseline session and records only last-observed pre-exit CPU; it is insufficient
+for a controlled CPU conclusion. Busy third-party app rendering remains untested.
+
+Receipts, all local and excluded from source control:
+
+- `build/qa/animation-ab-20261023-b/{legacy-a,clock-a,clock-b,legacy-b}/`
+- `build/qa/animation-ab-20261023-b/clock-pairing/`
+- `build/qa/animation-ab-20261023-b/clock-oversized/` (failed precondition)
+- `build/qa/animation-ab-20261023-b/comparison.json` (aggregated values/limits)
+- `build/research/animation-20261023/comparison-b.log`, `cpu-samples-b.json`
+- `build/qa/animation-ab-20261023-a/` and `qa-launch-sample.txt`: preserved initial
+  launch timeout, no fixture engine started. The QA window's task did not run;
+  using process-local ignored restoration state plus an explicit reopen made
+  subsequent launches enter the harness. This is not a performance sample.
+
+The most useful follow-up experiment would separate pure projection movement
+from native AX resize pacing and record phase-specific geometry/latency before
+changing either. The current evidence supports neither default enablement nor
+removing resize correctness guards.
+
+### Oversized fixture correction and remaining validation
+
+A hidden, never-ordered-front AppKit probe reproduced the failure: with empty
+`NSHostingView.sizingOptions`, deferred layout changed a manually assigned
+2,760-point minimum to zero. The corrected fixture supplies the oversized
+SwiftUI minimum and uses `.minSize` sizing for that opt-in case, starting with
+an oversized frame. The hidden probe retains the minimum through deferred layout;
+ordinary fixture sizing options remain unchanged.
+
+Proofs: `hidden-minimum-deferred-proof.json` and `hidden-minimum-fixed-proof.json`
+under `build/research/animation-20261023/`. This verifies the fixture setup
+mechanism without showing a window or interrupting normal use. The corrected
+full oversized **desktop focus test has not rerun**. The A/B and pairing passes
+above belong to the signed `e4bff50` bundle, before this fixture-only correction.
