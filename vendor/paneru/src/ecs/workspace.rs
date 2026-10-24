@@ -9,7 +9,9 @@ use bevy::ecs::observer::On;
 use bevy::ecs::query::{Added, Has, With, Without};
 use bevy::ecs::schedule::IntoScheduleConfigs as _;
 use bevy::ecs::schedule::common_conditions::{not, resource_exists};
-use bevy::ecs::system::{Commands, Local, ParamSet, Populated, Query, Res, ResMut, Single};
+use bevy::ecs::system::{
+    Commands, Local, NonSend, ParamSet, Populated, Query, Res, ResMut, Single,
+};
 use bevy::ecs::world::World;
 use bevy::time::common_conditions::on_timer;
 use std::collections::HashSet;
@@ -572,12 +574,19 @@ fn workspace_created_handler(
     mut messages: MessageReader<Event>,
     active_display: Single<(&Display, Entity), With<ActiveDisplayMarker>>,
     workspaces: Query<&LayoutStrip>,
+    projections: Option<NonSend<crate::manager::projection::Projections>>,
     mut commands: Commands,
 ) {
     for event in messages.read() {
         let Event::SpaceCreated { space_id } = event else {
             continue;
         };
+        if projections
+            .as_ref()
+            .is_some_and(|backend| backend.owns(*space_id))
+        {
+            continue;
+        }
 
         if workspaces.into_iter().any(|strip| strip.id() == *space_id) {
             warn!("Workspace {space_id} already exists!");

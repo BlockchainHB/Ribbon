@@ -125,7 +125,8 @@ final class SessionController: ObservableObject {
       policy.excludedBundleIDs = []
     }
     return [
-      "PANERU_MACH_SERVICE": "dev.ribbon.engine.\(getuid())",
+      "PANERU_MACH_SERVICE": CommandLine.arguments.contains("--qa-output")
+        ? "dev.ribbon.qa.\(getpid())" : "dev.ribbon.engine.\(getuid())",
       "PANERU_CONFIG": store.directory.appendingPathComponent("engine.toml").path,
       "XDG_CONFIG_HOME": store.directory.appendingPathComponent("config").path,
       "XDG_STATE_HOME": store.directory.appendingPathComponent("state").path,
@@ -205,6 +206,9 @@ final class SessionController: ObservableObject {
     config.activates = true
     if let report { config.arguments = ["--report", report.path] }
     if dualDisplays { config.arguments.append("--dual-displays") }
+    if CommandLine.arguments.contains("--qa-oversized") {
+      config.arguments.append("--oversized-minimums")
+    }
     if CommandLine.arguments.contains("--qa-maximized-startup") {
       config.arguments.append("--maximized-startup")
     }
@@ -264,7 +268,7 @@ final class SessionController: ObservableObject {
         child.standardOutput = handle
         child.standardError = handle
         child.environment?["RUST_LOG"] =
-          "warn,paneru::ecs::focus=trace,paneru::manager::windows=debug,paneru::commands=debug,paneru::ecs::systems=debug"
+          "warn,paneru::ecs::focus=trace,paneru::manager::windows=debug,paneru::manager::projection=debug,paneru::ecs::projection=trace,paneru::commands=debug,paneru::ecs::systems=debug"
       }
       child.terminationHandler = { [weak self] process in
         Task { @MainActor in self?.engineExited(process) }

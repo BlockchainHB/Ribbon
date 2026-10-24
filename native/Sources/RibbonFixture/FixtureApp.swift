@@ -124,6 +124,9 @@ final class FixtureDelegate: NSObject, NSApplicationDelegate {
     window.isReleasedWhenClosed = false
     window.tabbingMode = .disallowed
     window.minSize = NSSize(width: 260, height: 180)
+    if !sentinel && offset == 0 && CommandLine.arguments.contains("--oversized-minimums") {
+      window.minSize.width = bounds.width + 200
+    }
     let name = ["Editor", "Browser", "Terminal", "Notes"][(number - 1) % 4]
     let host = NSHostingView(
       rootView: FixtureView(number: number, name: name, sentinel: sentinel))
@@ -157,6 +160,7 @@ final class FixtureDelegate: NSObject, NSApplicationDelegate {
         "width": window.frame.width, "height": window.frame.height, "focused": window.isKeyWindow,
         "main": window.isMainWindow, "keyEligible": window.canBecomeKey,
         "appActive": NSApp.isActive,
+        "minimumWidth": window.minSize.width,
         "screenID":
           (window.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?
           .uint32Value ?? 0,

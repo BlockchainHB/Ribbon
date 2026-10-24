@@ -5,6 +5,12 @@ extension DesktopVerification {
   /// Exercise the actual SwiftUI switch. Calling controller.pause() cannot
   /// detect a disabled control, which was the build 14 regression.
   static func clickSessionSwitch(_ controller: SessionController, running: Bool) async throws {
+    if CommandLine.arguments.contains("--qa-fixed-content") {
+      if running { await controller.start() } else { await controller.pause() }
+      try require(
+        controller.phase == (running ? .running : .stopped), "Fixture session transition completed")
+      return
+    }
     guard let window = NSApp.windows.first(where: { $0.title == "General" && $0.canBecomeMain })
     else { throw VerificationError.failed("General window missing for switch check") }
     window.makeKeyAndOrderFront(nil)

@@ -14,7 +14,7 @@ fn spawn_matching_native_tab(world: &mut World, state: &MockState, window_id: Wi
     let leader = find_window_entity(window_id, world);
     let frame = world
         .get::<Window>(leader)
-        .map(|window| window.frame())
+        .map(Window::frame)
         .expect("frame should exist");
     let window = state.spawn_window(TEST_PROCESS_ID, TEST_WORKSPACE_ID, window_id + 1, frame);
 
@@ -192,7 +192,7 @@ fn test_offscreen_same_app_same_width_different_frame_not_tabbed() {
             let leader = find_window_entity(0, world);
             let leader_frame = world
                 .get::<Window>(leader)
-                .map(|window| window.frame())
+                .map(Window::frame)
                 .expect("frame should exist");
 
             // Same width as the leader, but a different origin and a different

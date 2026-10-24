@@ -69,6 +69,12 @@ extension DesktopVerification {
       report.checks.append(Check(name: "reorder moves a complete native pair", passed: true))
 
       try await overviewCommand(controller, ["focusid", String(other)])
+      if CommandLine.arguments.contains("--qa-fixed-content") {
+        // Earlier width stress may leave FullWidthMarker on this member.
+        // Clear that toggle before deliberately creating the hidden-pair case.
+        await controller.send(.width)
+        _ = try await settledFrames(fixture)
+      }
       await controller.send(.fullWidth)
       _ = try await settledFrames(fixture)
       try await eventually("Both pair members are genuinely hidden") {
@@ -99,15 +105,17 @@ extension DesktopVerification {
 
       let beforeUngrouped = try frames(fixture)
       // Capture the actual overview in both appearances, including pair badges.
-      try await overviewCommand(controller, ["overview"])
-      try await eventually("Pair overview is visible") { overviewButton(left) != nil }
-      for dark in [false, true] {
-        for window in NSApp.windows where window.title == "Arrange Windows" {
-          window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+      if !CommandLine.arguments.contains("--qa-fixed-content") {
+        try await overviewCommand(controller, ["overview"])
+        try await eventually("Pair overview is visible") { overviewButton(left) != nil }
+        for dark in [false, true] {
+          for window in NSApp.windows where window.title == "Arrange Windows" {
+            window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+          }
+          try await Task.sleep(for: .milliseconds(300))
+          try await captureOverview(
+            fixture: fixture, name: "pair-overview-\(dark ? "dark" : "light").png")
         }
-        try await Task.sleep(for: .milliseconds(300))
-        try await captureOverview(
-          fixture: fixture, name: "pair-overview-\(dark ? "dark" : "light").png")
       }
       if CommandLine.arguments.contains("--qa-external-input") {
         let directory = fixture.deletingLastPathComponent()

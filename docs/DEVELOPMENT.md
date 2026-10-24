@@ -47,6 +47,22 @@ Physical desktop verification is separate. Never run an unrestricted engine duri
 
 The native `--qa-output` suite verifies disposable test windows and an excluded sentinel. `--qa-dual` requires two connected displays. Specialized suites cover pairing, application activation, overview, and parking. Follow the existing harness and report hardware checks separately from mocked engine tests.
 
+The fixture-only `--qa-native-edge FRESH_OUTPUT` diagnostic checks foreign-window
+masking APIs from the signed app's existing permission context without starting
+an engine. See the [fixed-width edge investigation](fixed-width-edge-investigation.md)
+for its safety guards, reproduction command, results and interpretation limits.
+
+`--qa-fixed-content --qa-dual --qa-pairing --qa-output FRESH/report.json`
+uses the same fixture-only native suite with a PID-specific service and isolated
+state. It samples actual native content dimensions through modifier scrolling,
+navigation and interrupted resizing, independently reads public WindowServer
+positions, exercises hidden-pair activation, and checks restoration. It controls
+the test session directly; native menu/switch UI verification remains separate.
+Keep the desktop unlocked, connect both monitors, quit existing Ribbon instances
+first, and preserve failed receipts. The engine selects projection automatically
+on supported macOS 26+ runtimes; `RIBBON_NATIVE_PROJECTION=1` makes its availability
+mandatory for a diagnostic run.
+
 Historical local results are recorded in [verification.md](verification.md); paths under `build/qa/` refer to local receipts, not public bundled artifacts. Earlier receipts do not establish compatibility for a newly built executable.
 
 ## Recovery

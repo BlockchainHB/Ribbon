@@ -205,6 +205,7 @@ pub struct FrameActivity<'w, 's> {
     resizing: Query<'w, 's, (), With<ResizeMarker>>,
     scrolling: Query<'w, 's, (), With<Scrolling>>,
     flash_messages: Query<'w, 's, (), With<FlashMessage>>,
+    projection_pending: Query<'w, 's, (), With<super::projection::ProjectionPending>>,
 }
 
 impl FrameActivity<'_, '_> {
@@ -215,6 +216,7 @@ impl FrameActivity<'_, '_> {
             || !self.resizing.is_empty()
             || !self.scrolling.is_empty()
             || !self.flash_messages.is_empty()
+            || !self.projection_pending.is_empty()
     }
 }
 
@@ -270,6 +272,8 @@ pub struct Windows<'w, 's> {
     >,
     positions: WindowPlacements<'w, 's>,
     parked: Query<'w, 's, (), With<crate::ecs::layout::parking::CompactParked>>,
+    projections: Query<'w, 's, &'static super::projection::ProjectionViewport>,
+    projection_pending: Query<'w, 's, (), With<super::projection::ProjectionPending>>,
     preferred: Query<'w, 's, &'static crate::ecs::layout::width_policy::PreferredWidth>,
 }
 
@@ -282,7 +286,37 @@ impl Windows<'_, '_> {
             .or_else(|| self.moving_frame(entity).map(|frame| frame.width()))
     }
     pub fn is_parked(&self, entity: Entity) -> bool {
-        self.parked.contains(entity)
+        self.parked.contains(entity) || self.projections.get(entity).is_ok_and(|v| v.hidden)
+    }
+    pub fn native_focus_ready(&self, entity: Entity, strip_settled: bool) -> bool {
+        if self.is_parked(entity)
+            || self.projections.get(entity).is_ok_and(|v| v.suspended)
+            || self.projection_pending.contains(entity)
+        {
+            return false;
+        }
+        let Some(window) = self.get(entity).filter(|window| window.is_projected()) else {
+            return true;
+        };
+        let Ok(viewport) = self.projections.get(entity) else {
+            return false;
+        };
+        let padding =
+            bevy::math::IVec2::new(window.horizontal_padding(), window.vertical_padding());
+        let native = window.native_frame();
+        // A native minimum can exceed its monitor, making ordinary coordinates
+        // impossible at the logical left/right alignment. The source still
+        // belongs to its owner: permit focus once geometry settles there.
+        strip_settled
+            && self
+                .positions
+                .get(entity)
+                .is_ok_and(|(_, _, _, _, moving, resizing)| moving.is_none() && resizing.is_none())
+            && super::projection::native_body(native, padding)
+                .size()
+                .cmpgt(viewport.clip.size())
+                .any()
+            && super::projection::safe_anchor(native, viewport.clip, padding) == native.min
     }
     fn get_all(&self, entity: Entity) -> Option<(&Window, Entity, &ChildOf, Option<&Unmanaged>)> {
         self.all

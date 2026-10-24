@@ -8,6 +8,7 @@ struct FixtureFrame: Codable {
   let x: Double, y: Double, width: Double, height: Double
   let focused: Bool
   let screenID: UInt32
+  let minimumWidth: Double?
   func matches(_ other: Self) -> Bool {
     abs(x - other.x) < 4 && abs(y - other.y) < 4 && abs(width - other.width) < 4
       && abs(height - other.height) < 4
@@ -61,6 +62,19 @@ enum DesktopVerification {
     report.displays = NSScreen.screens.map(DisplaySnapshot.init)
     var owned: [NSRunningApplication] = []
     do {
+      let fixedContent = CommandLine.arguments.contains("--qa-fixed-content")
+      if fixedContent {
+        let session = CGSessionCopyCurrentDictionary() as? [String: Any] ?? [:]
+        try require(
+          session["CGSSessionScreenIsLocked"] as? Bool != true, "Desktop must be unlocked")
+        let check = Process()
+        check.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        check.arguments = ["-x", "ribbon-engine"]
+        check.standardOutput = FileHandle.nullDevice
+        try check.run()
+        check.waitUntilExit()
+        try require(check.terminationStatus != 0, "Pause Ribbon before isolated fixture QA")
+      }
       try FileManager.default.createDirectory(
         at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
       report.engineSHA256 = SHA256.hash(data: try Data(contentsOf: controller.engineURL)).map {
@@ -87,7 +101,7 @@ enum DesktopVerification {
         throw VerificationError.failed(
           "An existing demo test app is open. Close it before this isolated test run.")
       }
-      try await verifyStatusItem(statusMenu, report: &report)
+      if !fixedContent { try await verifyStatusItem(statusMenu, report: &report) }
       let dualDisplays = CommandLine.arguments.contains("--qa-dual")
       if dualDisplays && NSScreen.screens.count != 2 {
         throw VerificationError.failed("Dual-display QA requires exactly two connected displays")
@@ -119,7 +133,18 @@ enum DesktopVerification {
           && state.windows.allSatisfy { $0.bundleID == RibbonSettings.fixtureBundleID }
       }
       report.checks.append(Check(name: "start and exact application scope", passed: true))
-      if CommandLine.arguments.contains("--qa-maximized-startup") {
+      if fixedContent {
+        if CommandLine.arguments.contains("--qa-oversized") {
+          try await verifyOversizedFocus(controller, fixture: fixture, report: &report)
+        } else {
+          try await verifyFixedContent(controller, fixture: fixture, report: &report)
+        }
+        if CommandLine.arguments.contains("--qa-pairing")
+          && !CommandLine.arguments.contains("--qa-oversized")
+        {
+          try await verifyPairing(controller, fixture: fixture, report: &report)
+        }
+      } else if CommandLine.arguments.contains("--qa-maximized-startup") {
         try await verifyMaximizedStartup(
           controller, fixture: fixture, original: original, report: &report)
       } else if CommandLine.arguments.contains("--qa-pairing") {
@@ -216,7 +241,7 @@ enum DesktopVerification {
       report.checks.append(Check(name: "excluded application never moved", passed: true))
       try await clickSessionSwitch(controller, running: false)
       report.checks.append(
-        Check(name: "native switch pauses a running session with a recovery journal", passed: true))
+        Check(name: "session pause restores windows with a recovery journal", passed: true))
       try require(
         controller.phase == .stopped && !controller.recoveryPending, "Pause completed recovery")
       try await eventually("Original frames restored") {
@@ -242,6 +267,10 @@ enum DesktopVerification {
       report.detail =
         "Disposable fixture applications only. Focus timings include 100 ms reporting cadence; these are not input-to-photon benchmarks."
     } catch {
+      if CommandLine.arguments.contains("--qa-fixed-content") {
+        try? await controller.query().write(
+          to: output.deletingLastPathComponent().appendingPathComponent("failed-state.json"))
+      }
       await controller.pause()
       report.status = "failed"
       report.detail = error.localizedDescription

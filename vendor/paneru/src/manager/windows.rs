@@ -7,13 +7,13 @@ use accessibility_sys::{
 use bevy::ecs::component::Component;
 use bevy::math::IRect;
 use core::ptr::NonNull;
-use derive_more::{DerefMut, with_trait::Deref};
 use mockall::automock;
 use objc2_core_foundation::{
     CFArray, CFBoolean, CFNumber, CFRetained, CFString, CFType, CGPoint, CGSize, kCFBooleanFalse,
     kCFBooleanTrue,
 };
 use std::collections::HashMap;
+use std::ops::{Deref, DerefMut};
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex, OnceLock, RwLock};
@@ -327,13 +327,69 @@ pub trait WindowApi: Send + Sync {
     fn border_radius(&self) -> Option<f64>;
 }
 
-#[derive(Component, Deref, DerefMut)]
-pub struct Window(Box<dyn WindowApi>);
+#[derive(Component)]
+pub struct Window {
+    api: Box<dyn WindowApi>,
+    /// The compositor moves the presentation without changing the app's frame.
+    /// Keep AX reads in the same coordinate system as the engine's positions.
+    presentation_offset: Origin,
+}
 
 impl Window {
     pub fn new(window: Box<dyn WindowApi>) -> Self {
-        Window(window)
+        Self {
+            api: window,
+            presentation_offset: Origin::ZERO,
+        }
     }
+
+    pub fn frame(&self) -> IRect {
+        translated_frame(self.api.frame(), self.presentation_offset)
+    }
+
+    pub fn update_frame(&mut self) -> Result<IRect> {
+        self.api
+            .update_frame()
+            .map(|frame| translated_frame(frame, self.presentation_offset))
+    }
+
+    pub fn reposition(&mut self, origin: Origin) {
+        self.api.reposition(origin - self.presentation_offset);
+    }
+
+    pub(crate) fn native_frame(&self) -> IRect {
+        self.api.frame()
+    }
+
+    pub(crate) fn set_presentation_offset(&mut self, offset: Origin) {
+        self.presentation_offset = offset;
+    }
+
+    pub(crate) fn is_projected(&self) -> bool {
+        self.presentation_offset != Origin::ZERO
+    }
+
+    pub(crate) fn reposition_native(&mut self, origin: Origin) {
+        self.api.reposition(origin);
+    }
+}
+
+impl Deref for Window {
+    type Target = dyn WindowApi;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.api
+    }
+}
+
+impl DerefMut for Window {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut *self.api
+    }
+}
+
+fn translated_frame(frame: IRect, offset: Origin) -> IRect {
+    IRect::from_corners(frame.min + offset, frame.max + offset)
 }
 
 /// Retrieves the window ID (`WinID`) from an `AXUIElementRef`.
@@ -1035,6 +1091,38 @@ mod tests {
     use crate::platform::ProcessSerialNumber;
     use crate::tests::TestHarness;
     use std::sync::{atomic::AtomicUsize, mpsc};
+
+    #[test]
+    fn projected_ax_reads_preserve_full_content_size_and_logical_coordinates() {
+        let native = IRect::new(6, 30, 2554, 1331);
+        let mut api = MockWindowApi::new();
+        api.expect_frame().return_const(native);
+        api.expect_update_frame().returning(move || Ok(native));
+        api.expect_resize().times(0);
+        let mut window = Window::new(Box::new(api));
+
+        window.set_presentation_offset(Origin::new(2528, 0));
+        assert_eq!(window.native_frame(), native);
+        assert_eq!(window.frame(), IRect::new(2534, 30, 5082, 1331));
+        assert_eq!(window.update_frame().unwrap(), window.frame());
+        assert_eq!(window.frame().size(), native.size());
+
+        window.set_presentation_offset(Origin::ZERO);
+        assert_eq!(window.update_frame().unwrap(), native);
+    }
+
+    #[test]
+    fn projected_native_position_writes_do_not_use_the_visual_offset() {
+        let mut api = MockWindowApi::new();
+        api.expect_reposition()
+            .with(mockall::predicate::eq(Origin::new(10, 40)))
+            .times(2)
+            .return_const(());
+        let mut window = Window::new(Box::new(api));
+        window.set_presentation_offset(Origin::new(-1700, 0));
+        window.reposition(Origin::new(-1690, 40));
+        window.reposition_native(Origin::new(10, 40));
+    }
 
     #[test]
     fn enhanced_ui_termination_discards_failed_restoration_before_pid_reuse() {
